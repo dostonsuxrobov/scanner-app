@@ -1,18 +1,25 @@
 body {
   font-family: sans-serif;
-  text-align: center;
+  text-align: center; /* This will center the inline-block container */
   padding: 20px;
   background: #f0f0f0;
+  margin: 0;
+}
+
+/* This container is crucial for positioning the crop handles correctly */
+#canvas-container {
+  position: relative; /* Establishes a positioning context for the handles */
+  display: inline-block; /* Makes the container size itself to the canvas */
+  margin-top: 20px;
+  line-height: 0; /* Prevents extra space below the canvas */
 }
 
 canvas {
-  display: block;
-  margin: 30px auto;
-  max-width: 95vw; /* scale to viewport width */
-  max-height: 85vh; /* scale to viewport height */
+  display: block; /* Ensures it behaves as a block element inside the container */
+  max-width: 95vw;
+  max-height: 85vh;
   width: auto;
   height: auto;
   border: 1px solid #aaa;
   box-shadow: 0 0 8px rgba(0,0,0,0.2);
 }
-
