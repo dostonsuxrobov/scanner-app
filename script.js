@@ -1,5 +1,6 @@
-// Set the worker source for PDF.js once at the top level.
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
+// Set the worker source for PDF.js to a local file.
+// This is the most reliable method for deploying on services like GitHub Pages.
+pdfjsLib.GlobalWorkerOptions.workerSrc = './libs/pdf.worker.min.js';
 
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
