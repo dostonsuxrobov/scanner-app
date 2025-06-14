@@ -9,22 +9,27 @@ window.addEventListener('load', () => {
   const imageInput = document.getElementById('imageInput');
   const perspectiveBtn = document.getElementById('perspectiveCropButton');
   
-  // Show perspective crop button when image is loaded
   const originalInputHandler = imageInput.onchange;
   imageInput.addEventListener('change', (e) => {
-    // Call original handler if exists
     if (originalInputHandler) originalInputHandler.call(imageInput, e);
-    
-    // Show crop button after a delay to ensure image is loaded
     setTimeout(() => {
       perspectiveBtn.style.display = 'inline-block';
-      perspectiveActive = false;
+      if (perspectiveActive) {
+          // If a crop was active, cancel it when a new image is loaded
+          removeCornerHandles();
+          perspectiveActive = false;
+          document.getElementById('perspectiveCropButton').textContent = 'Perspective Crop';
+          const canvas = document.getElementById('canvas');
+          const ctx = canvas.getContext('2d');
+          if (originalImageData) {
+            ctx.putImageData(originalImageData, 0, 0);
+          }
+      }
       corners = [];
-      removeCornerHandles();
+      
     }, 500);
   });
   
-  // Initialize perspective cropping
   perspectiveBtn.addEventListener('click', () => {
     if (perspectiveActive) {
       applyPerspectiveCrop();
@@ -33,7 +38,6 @@ window.addEventListener('load', () => {
     }
   });
   
-  // Keyboard shortcuts for applying crop
   document.addEventListener('keydown', (e) => {
     if (perspectiveActive && (e.key === 'Enter' || e.key === ' ')) {
       e.preventDefault();
@@ -49,10 +53,8 @@ function initializePerspectiveCrop() {
   perspectiveActive = true;
   document.getElementById('perspectiveCropButton').textContent = 'Apply Crop (Enter/Space)';
   
-  // Store original image
   originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   
-  // Initialize corners at 20% margin from edges
   const margin = 0.2;
   corners = [
     { x: canvas.width * margin, y: canvas.height * margin },
@@ -66,8 +68,13 @@ function initializePerspectiveCrop() {
 }
 
 function createCornerHandles() {
-  const canvas = document.getElementById('canvas');
-  
+  // Use the new container as the parent for the handles
+  const canvasContainer = document.getElementById('canvas-container');
+  if (!canvasContainer) {
+      console.error("Canvas container not found!");
+      return;
+  }
+
   corners.forEach((corner, index) => {
     const handle = document.createElement('div');
     handle.style.cssText = `
@@ -85,75 +92,75 @@ function createCornerHandles() {
     
     updateHandlePosition(handle, corner);
     
-    // Make draggable
     let isDragging = false;
     
-    handle.addEventListener('mousedown', (e) => {
+    const onDragStart = (e) => {
       e.preventDefault();
       isDragging = true;
-    });
-    
-    document.addEventListener('mousemove', (e) => {
-      if (isDragging) {
-        const rect = canvas.getBoundingClientRect();
-        corner.x = (e.clientX - rect.left) * (canvas.width / rect.width);
-        corner.y = (e.clientY - rect.top) * (canvas.height / rect.height);
-        updateHandlePosition(handle, corner);
-        drawPerspectiveGuides();
-      }
-    });
-    
-    document.addEventListener('mouseup', () => {
+    };
+
+    const onDragMove = (e) => {
+        if (isDragging) {
+            e.preventDefault();
+            const canvas = document.getElementById('canvas');
+            const rect = canvasContainer.getBoundingClientRect(); // Use container's rect
+            
+            // Determine clientX/Y from either mouse or touch event
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            // Calculate position relative to the container
+            const x = clientX - rect.left;
+            const y = clientY - rect.top;
+
+            // Convert container-relative position to canvas-native coordinates
+            corner.x = (x / rect.width) * canvas.width;
+            corner.y = (y / rect.height) * canvas.height;
+            
+            // Clamp coordinates to stay within canvas bounds
+            corner.x = Math.max(0, Math.min(canvas.width, corner.x));
+            corner.y = Math.max(0, Math.min(canvas.height, corner.y));
+
+            updateHandlePosition(handle, corner);
+            drawPerspectiveGuides();
+        }
+    };
+
+    const onDragEnd = () => {
       isDragging = false;
-    });
+    };
     
-    // Touch support
-    handle.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      isDragging = true;
-    });
+    handle.addEventListener('mousedown', onDragStart);
+    document.addEventListener('mousemove', onDragMove);
+    document.addEventListener('mouseup', onDragEnd);
     
-    document.addEventListener('touchmove', (e) => {
-      if (isDragging && e.touches.length > 0) {
-        const rect = canvas.getBoundingClientRect();
-        const touch = e.touches[0];
-        corner.x = (touch.clientX - rect.left) * (canvas.width / rect.width);
-        corner.y = (touch.clientY - rect.top) * (canvas.height / rect.height);
-        updateHandlePosition(handle, corner);
-        drawPerspectiveGuides();
-      }
-    });
+    handle.addEventListener('touchstart', onDragStart);
+    document.addEventListener('touchmove', onDragMove, { passive: false });
+    document.addEventListener('touchend', onDragEnd);
     
-    document.addEventListener('touchend', () => {
-      isDragging = false;
-    });
-    
-    document.body.appendChild(handle);
+    // Append handle to the container, not the body
+    canvasContainer.appendChild(handle);
     cornerHandles.push(handle);
   });
 }
 
 function updateHandlePosition(handle, corner) {
   const canvas = document.getElementById('canvas');
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = rect.width / canvas.width;
-  const scaleY = rect.height / canvas.height;
-  handle.style.left = (rect.left + corner.x * scaleX) + 'px';
-  handle.style.top = (rect.top + corner.y * scaleY) + 'px';
+  // Position the handle relative to the container using percentages
+  handle.style.left = `${(corner.x / canvas.width) * 100}%`;
+  handle.style.top = `${(corner.y / canvas.height) * 100}%`;
 }
+
 
 function drawPerspectiveGuides() {
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
   
-  // Restore original image
   ctx.putImageData(originalImageData, 0, 0);
   
-  // Draw semi-transparent overlay
   ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   
-  // Clear the selected area
   ctx.save();
   ctx.globalCompositeOperation = 'destination-out';
   ctx.beginPath();
@@ -165,7 +172,6 @@ function drawPerspectiveGuides() {
   ctx.fill();
   ctx.restore();
   
-  // Draw the original image in the selected area
   ctx.save();
   ctx.beginPath();
   ctx.moveTo(corners[0].x, corners[0].y);
@@ -177,7 +183,6 @@ function drawPerspectiveGuides() {
   ctx.putImageData(originalImageData, 0, 0);
   ctx.restore();
   
-  // Draw border lines
   ctx.strokeStyle = '#007bff';
   ctx.lineWidth = 3;
   ctx.setLineDash([10, 5]);
@@ -197,49 +202,53 @@ function removeCornerHandles() {
 }
 
 function applyPerspectiveCrop() {
+  // NOTE: This is a simplified crop. True perspective warp is more complex.
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
   
-  // Find bounding box
-  const minX = Math.min(...corners.map(c => c.x));
-  const maxX = Math.max(...corners.map(c => c.x));
-  const minY = Math.min(...corners.map(c => c.y));
-  const maxY = Math.max(...corners.map(c => c.y));
+  const minX = Math.min(corners[0].x, corners[1].x, corners[2].x, corners[3].x);
+  const maxX = Math.max(corners[0].x, corners[1].x, corners[2].x, corners[3].x);
+  const minY = Math.min(corners[0].y, corners[1].y, corners[2].y, corners[3].y);
+  const maxY = Math.max(corners[0].y, corners[1].y, corners[2].y, corners[3].y);
   
   const width = maxX - minX;
   const height = maxY - minY;
+
+  if (width <= 0 || height <= 0) {
+      removeAndCleanup();
+      return;
+  }
   
-  // Create temporary canvas for cropped image
   const tempCanvas = document.createElement('canvas');
   tempCanvas.width = width;
   tempCanvas.height = height;
   const tempCtx = tempCanvas.getContext('2d');
   
-  // Put back original image first
   ctx.putImageData(originalImageData, 0, 0);
   
-  // Simple crop
   tempCtx.drawImage(
     canvas,
     minX, minY, width, height,
     0, 0, width, height
   );
   
-  // Update main canvas
   canvas.width = width;
   canvas.height = height;
   ctx.clearRect(0, 0, width, height);
   ctx.drawImage(tempCanvas, 0, 0);
   
-  // Cleanup
-  removeCornerHandles();
-  perspectiveActive = false;
-  document.getElementById('perspectiveCropButton').textContent = 'Perspective Crop';
-  corners = [];
-  originalImageData = null;
+  removeAndCleanup();
 }
 
-// Update handle positions when window resizes
+function removeAndCleanup() {
+    removeCornerHandles();
+    perspectiveActive = false;
+    document.getElementById('perspectiveCropButton').textContent = 'Perspective Crop';
+    corners = [];
+    originalImageData = null;
+}
+
+// Update handle positions if window resizes, as container size might change
 window.addEventListener('resize', () => {
   if (perspectiveActive) {
     cornerHandles.forEach((handle, index) => {
