@@ -3,19 +3,109 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>simple</title>
+  <title>Document Scanner</title>
   <link rel="stylesheet" href="style.css" />
+  <!-- Inline styles for UI elements -->
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background-color: #f0f0f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .controls {
+      margin-top: 20px;
+      margin-bottom: 10px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .controls button, .controls input {
+        padding: 8px 12px;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+        background-color: white;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background-color 0.2s;
+    }
+     .controls button:hover {
+        background-color: #f7f7f7;
+     }
+    #pdf-controls {
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    #pdf-controls button {
+        padding: 6px 10px;
+    }
+    #alert-modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0,0,0,0.4);
+        justify-content: center;
+        align-items: center;
+    }
+    #alert-modal-content {
+        background-color: #fefefe;
+        padding: 20px;
+        border: 1px solid #888;
+        width: 80%;
+        max-width: 400px;
+        border-radius: 8px;
+        text-align: center;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    #alert-modal-close {
+        background-color: #007bff;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        margin-top: 15px;
+    }
+  </style>
 </head>
 <body>
-  <!-- <h1></h1> -->
-  <input type="file" id="imageInput" accept="image/*" />
-  <button id="perspectiveCropButton" style="display: none;">Perspective Crop</button>
-  <button id="bwButton">Black & White</button>
-  <button id="downloadPdf">Download PDF</button>
-  <canvas id="canvas"></canvas>
+  <div class="controls">
+      <input type="file" id="imageInput" accept="image/*,application/pdf" />
+      <button id="perspectiveCropButton" style="display: none;">Perspective Crop</button>
+      <button id="bwButton">Black & White</button>
+      <button id="downloadPdf">Download PDF</button>
+  </div>
 
-  <script src="script.js"></script>
+  <div id="pdf-controls" style="display: none;">
+      <button id="prev-page">&lt; Prev</button>
+      <span>Page: <span id="page-num"></span> / <span id="page-count"></span></span>
+      <button id="next-page">Next &gt;</button>
+  </div>
+  
+  <!-- The container is essential for correct handle positioning -->
+  <div id="canvas-container">
+      <canvas id="canvas"></canvas>
+  </div>
+
+  <div id="alert-modal" style="display: none;">
+    <div id="alert-modal-content">
+      <p id="alert-modal-text"></p>
+      <button id="alert-modal-close">OK</button>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
   <script src="libs/jspdf.umd.min.js"></script>
+  <script src="script.js"></script>
   <script src="crop-scanner.js"></script>
 </body>
 </html>
