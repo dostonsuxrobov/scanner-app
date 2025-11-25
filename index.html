@@ -3,62 +3,138 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DocuScan Pro</title>
-    <!-- Tailwind CSS for styling -->
+    <title>simple</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Babel for JSX compilation in browser -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- jsPDF for PDF Export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        border: "hsl(var(--border))",
+                        input: "hsl(var(--input))",
+                        ring: "hsl(var(--ring))",
+                        background: "hsl(var(--background))",
+                        foreground: "hsl(var(--foreground))",
+                        primary: {
+                            DEFAULT: "hsl(var(--primary))",
+                            foreground: "hsl(var(--primary-foreground))",
+                        },
+                        secondary: {
+                            DEFAULT: "hsl(var(--secondary))",
+                            foreground: "hsl(var(--secondary-foreground))",
+                        },
+                        destructive: {
+                            DEFAULT: "hsl(var(--destructive))",
+                            foreground: "hsl(var(--destructive-foreground))",
+                        },
+                        muted: {
+                            DEFAULT: "hsl(var(--muted))",
+                            foreground: "hsl(var(--muted-foreground))",
+                        },
+                        accent: {
+                            DEFAULT: "hsl(var(--accent))",
+                            foreground: "hsl(var(--accent-foreground))",
+                        },
+                    },
+                    borderRadius: {
+                        lg: "var(--radius)",
+                        md: "calc(var(--radius) - 2px)",
+                        sm: "calc(var(--radius) - 4px)",
+                    },
+                },
+            },
+        }
+    </script>
     <style>
-        body { margin: 0; padding: 0; height: 100vh; overflow: hidden; }
-        /* Custom scrollbar for webkit */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        :root {
+            --background: 0 0% 100%;
+            --foreground: 240 10% 3.9%;
+            --card: 0 0% 100%;
+            --card-foreground: 240 10% 3.9%;
+            --popover: 0 0% 100%;
+            --popover-foreground: 240 10% 3.9%;
+            --primary: 240 5.9% 10%;
+            --primary-foreground: 0 0% 98%;
+            --secondary: 240 4.8% 95.9%;
+            --secondary-foreground: 240 5.9% 10%;
+            --muted: 240 4.8% 95.9%;
+            --muted-foreground: 240 3.8% 46.1%;
+            --accent: 240 4.8% 95.9%;
+            --accent-foreground: 240 5.9% 10%;
+            --destructive: 0 84.2% 60.2%;
+            --destructive-foreground: 0 0% 98%;
+            --border: 240 5.9% 90%;
+            --input: 240 5.9% 90%;
+            --ring: 240 10% 3.9%;
+            --radius: 0.5rem;
+        }
+        body { margin: 0; padding: 0; height: 100vh; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        .bg-dot-pattern {
+            background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        .crop-handle {
+            width: 14px;
+            height: 14px;
+            background: white;
+            border: 2px solid hsl(240 5.9% 10%);
+            border-radius: 50%;
+            position: absolute;
+            cursor: move;
+            z-index: 100;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            transition: transform 0.1s ease, background 0.1s ease;
+        }
+        .crop-handle:hover {
+            transform: translate(-50%, -50%) scale(1.2);
+            background: hsl(240 5.9% 10%);
+        }
+        .crop-handle:active {
+            transform: translate(-50%, -50%) scale(1.3);
+        }
     </style>
 </head>
-<body>
+<body class="bg-background text-foreground antialiased">
     <div id="root"></div>
 
-    <!-- Main Application Logic -->
     <script type="text/babel" data-type="module">
-        // Import Dependencies from ESM.sh (CDN)
         import React, { useState, useRef, useEffect } from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
         import { clsx } from 'https://esm.sh/clsx';
         import { twMerge } from 'https://esm.sh/tailwind-merge';
         import { 
-          Menu, Search, MousePointer2, Hand, ZoomIn, ZoomOut, Save, 
+          ZoomIn, ZoomOut, 
           Image as ImageIcon, Wand2, ScanLine, Download, Trash2, 
-          ChevronRight, ChevronLeft, Settings, MoreVertical, X, 
-          FileText, Layers, Crop, Sun, Contrast, RotateCw, FileType, Check,
-          Paintbrush, Palette
+          ChevronRight, ChevronLeft, 
+          FileText, Crop, RotateCw, Check,
+          Paintbrush, Plus, RefreshCw, Sparkles
         } from 'https://esm.sh/lucide-react@0.294.0?deps=react@18.2.0';
 
-        // --- Utility Components ---
         const cn = (...inputs) => twMerge(clsx(inputs));
 
         const Button = ({ children, variant = "default", size = "default", className, ...props }) => {
             const variants = {
-                default: "bg-slate-900 text-white hover:bg-slate-800",
-                outline: "border border-slate-200 bg-white hover:bg-slate-100 text-slate-900",
-                ghost: "hover:bg-slate-100 text-slate-700",
-                secondary: "bg-slate-100 text-slate-900 hover:bg-slate-200",
-                destructive: "bg-red-500 text-white hover:bg-red-600",
+                default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow",
+                destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm",
+                outline: "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground",
+                secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+                ghost: "hover:bg-accent hover:text-accent-foreground",
+                link: "text-primary underline-offset-4 hover:underline",
             };
             const sizes = {
-                default: "h-10 px-4 py-2",
-                sm: "h-9 rounded-md px-3",
-                icon: "h-10 w-10",
-                lg: "h-11 rounded-md px-8"
+                default: "h-9 px-4 py-2",
+                sm: "h-8 rounded-md px-3 text-xs",
+                lg: "h-10 rounded-md px-8",
+                icon: "h-9 w-9",
             };
             return (
                 <button 
                     className={cn(
-                        "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-950 disabled:pointer-events-none disabled:opacity-50",
+                        "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
                         variants[variant], sizes[size], className
                     )}
                     {...props}
@@ -69,65 +145,262 @@
         };
 
         const Separator = ({ className, orientation = "horizontal" }) => (
-            <div className={cn(
-                "bg-slate-200",
-                orientation === "horizontal" ? "h-[1px] w-full" : "h-full w-[1px]",
-                className
-            )} />
+            <div className={cn("bg-border", orientation === "horizontal" ? "h-[1px] w-full" : "h-full w-[1px]", className)} />
         );
 
-        // --- Image Processing Logic (OmniFix) ---
-        const applyOmniFilter = (ctx, width, height, thresholdLevel = 100) => {
-            const imageData = ctx.getImageData(0, 0, width, height);
+        // --- Advanced Document Enhancement ---
+        const removeShadows = (imageData, width, height) => {
             const data = imageData.data;
-
-            for (let i = 0; i < data.length; i += 4) {
-                const r = data[i];
-                const g = data[i + 1];
-                const b = data[i + 2];
-                
-                let gray = 0.299 * r + 0.587 * g + 0.114 * b;
-                // High contrast curve
-                gray = (gray - 128) * 1.5 + 128;
-                
-                // Smart Binarization
-                if (gray > thresholdLevel) {
-                    gray = 255; // Paper white
-                } else {
-                    gray = gray * 0.8; // Ink dark
+            const blockSize = Math.max(32, Math.floor(Math.min(width, height) / 8));
+            const background = new Float32Array(width * height);
+            
+            for (let by = 0; by < height; by += blockSize) {
+                for (let bx = 0; bx < width; bx += blockSize) {
+                    let maxBrightness = 0;
+                    for (let y = by; y < Math.min(by + blockSize, height); y++) {
+                        for (let x = bx; x < Math.min(bx + blockSize, width); x++) {
+                            const idx = (y * width + x) * 4;
+                            const brightness = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+                            maxBrightness = Math.max(maxBrightness, brightness);
+                        }
+                    }
+                    for (let y = by; y < Math.min(by + blockSize, height); y++) {
+                        for (let x = bx; x < Math.min(bx + blockSize, width); x++) {
+                            background[y * width + x] = maxBrightness;
+                        }
+                    }
                 }
+            }
+            
+            for (let i = 0; i < width * height; i++) {
+                const idx = i * 4;
+                const bg = Math.max(background[i], 1);
+                const factor = 255 / bg;
+                data[idx] = Math.min(255, data[idx] * factor);
+                data[idx + 1] = Math.min(255, data[idx + 1] * factor);
+                data[idx + 2] = Math.min(255, data[idx + 2] * factor);
+            }
+        };
 
-                data[i] = gray;
-                data[i + 1] = gray;
-                data[i + 2] = gray;
+        const applyGaussianBlur = (imageData, width, height) => {
+            const data = imageData.data;
+            const output = new Uint8ClampedArray(data.length);
+            const kernel = [1, 2, 1, 2, 4, 2, 1, 2, 1];
+            const kernelSum = 16;
+            
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    let r = 0, g = 0, b = 0, ki = 0;
+                    for (let ky = -1; ky <= 1; ky++) {
+                        for (let kx = -1; kx <= 1; kx++) {
+                            const px = Math.min(width - 1, Math.max(0, x + kx));
+                            const py = Math.min(height - 1, Math.max(0, y + ky));
+                            const idx = (py * width + px) * 4;
+                            const weight = kernel[ki++];
+                            r += data[idx] * weight;
+                            g += data[idx + 1] * weight;
+                            b += data[idx + 2] * weight;
+                        }
+                    }
+                    const outIdx = (y * width + x) * 4;
+                    output[outIdx] = r / kernelSum;
+                    output[outIdx + 1] = g / kernelSum;
+                    output[outIdx + 2] = b / kernelSum;
+                    output[outIdx + 3] = data[outIdx + 3];
+                }
+            }
+            for (let i = 0; i < data.length; i++) data[i] = output[i];
+        };
+
+        const applySharpen = (imageData, width, height, amount = 0.5) => {
+            const data = imageData.data;
+            const original = new Uint8ClampedArray(data);
+            applyGaussianBlur(imageData, width, height);
+            for (let i = 0; i < data.length; i += 4) {
+                for (let c = 0; c < 3; c++) {
+                    const diff = original[i + c] - data[i + c];
+                    data[i + c] = Math.min(255, Math.max(0, original[i + c] + diff * amount * 2));
+                }
+            }
+        };
+
+        const enhanceContrast = (imageData, width, height) => {
+            const data = imageData.data;
+            let minR = 255, maxR = 0, minG = 255, maxG = 0, minB = 255, maxB = 0;
+            for (let i = 0; i < data.length; i += 4) {
+                minR = Math.min(minR, data[i]); maxR = Math.max(maxR, data[i]);
+                minG = Math.min(minG, data[i + 1]); maxG = Math.max(maxG, data[i + 1]);
+                minB = Math.min(minB, data[i + 2]); maxB = Math.max(maxB, data[i + 2]);
+            }
+            const rangeR = maxR - minR || 1, rangeG = maxG - minG || 1, rangeB = maxB - minB || 1;
+            for (let i = 0; i < data.length; i += 4) {
+                data[i] = ((data[i] - minR) / rangeR) * 255;
+                data[i + 1] = ((data[i + 1] - minG) / rangeG) * 255;
+                data[i + 2] = ((data[i + 2] - minB) / rangeB) * 255;
+            }
+        };
+
+        const applyAdaptiveThreshold = (imageData, width, height, sensitivity = 0.15) => {
+            const data = imageData.data;
+            const gray = new Float32Array(width * height);
+            for (let i = 0; i < width * height; i++) {
+                const idx = i * 4;
+                gray[i] = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+            }
+            
+            const integral = new Float64Array(width * height);
+            for (let y = 0; y < height; y++) {
+                let rowSum = 0;
+                for (let x = 0; x < width; x++) {
+                    rowSum += gray[y * width + x];
+                    integral[y * width + x] = y === 0 ? rowSum : integral[(y - 1) * width + x] + rowSum;
+                }
+            }
+            
+            const windowSize = Math.floor(Math.min(width, height) / 8);
+            const s = Math.floor(windowSize / 2);
+            const t = 1 - sensitivity;
+            
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const x1 = Math.max(0, x - s), y1 = Math.max(0, y - s);
+                    const x2 = Math.min(width - 1, x + s), y2 = Math.min(height - 1, y + s);
+                    const count = (x2 - x1 + 1) * (y2 - y1 + 1);
+                    
+                    let sum = integral[y2 * width + x2];
+                    if (x1 > 0) sum -= integral[y2 * width + (x1 - 1)];
+                    if (y1 > 0) sum -= integral[(y1 - 1) * width + x2];
+                    if (x1 > 0 && y1 > 0) sum += integral[(y1 - 1) * width + (x1 - 1)];
+                    
+                    const mean = sum / count;
+                    const idx = (y * width + x) * 4;
+                    const value = gray[y * width + x] > mean * t ? 255 : 0;
+                    data[idx] = value; data[idx + 1] = value; data[idx + 2] = value;
+                }
+            }
+        };
+
+        const applyDocumentEnhancement = (ctx, width, height, mode = 'auto') => {
+            const imageData = ctx.getImageData(0, 0, width, height);
+            if (mode === 'auto' || mode === 'scan') {
+                removeShadows(imageData, width, height);
+                enhanceContrast(imageData, width, height);
+                applySharpen(imageData, width, height, 0.6);
+                applyAdaptiveThreshold(imageData, width, height, mode === 'scan' ? 0.12 : 0.18);
+            } else if (mode === 'lighten') {
+                removeShadows(imageData, width, height);
+                enhanceContrast(imageData, width, height);
+            } else if (mode === 'sharpen') {
+                applySharpen(imageData, width, height, 1.0);
+                enhanceContrast(imageData, width, height);
             }
             ctx.putImageData(imageData, 0, 0);
         };
 
-        // --- Main Component ---
+        // --- Perspective Transform ---
+        const solveLinearSystem = (A, b) => {
+            const n = b.length;
+            const augmented = A.map((row, i) => [...row, b[i]]);
+            for (let col = 0; col < n; col++) {
+                let maxRow = col;
+                for (let row = col + 1; row < n; row++) {
+                    if (Math.abs(augmented[row][col]) > Math.abs(augmented[maxRow][col])) maxRow = row;
+                }
+                [augmented[col], augmented[maxRow]] = [augmented[maxRow], augmented[col]];
+                for (let row = col + 1; row < n; row++) {
+                    const factor = augmented[row][col] / augmented[col][col];
+                    for (let j = col; j <= n; j++) augmented[row][j] -= factor * augmented[col][j];
+                }
+            }
+            const x = new Array(n).fill(0);
+            for (let row = n - 1; row >= 0; row--) {
+                x[row] = augmented[row][n];
+                for (let col = row + 1; col < n; col++) x[row] -= augmented[row][col] * x[col];
+                x[row] /= augmented[row][row];
+            }
+            return x;
+        };
+
+        const computePerspectiveTransform = (srcPoints, dstPoints) => {
+            const [p0, p1, p2, p3] = srcPoints;
+            const [d0, d1, d2, d3] = dstPoints;
+            const A = [], b = [];
+            const points = [[p0, d0], [p1, d1], [p2, d2], [p3, d3]];
+            for (const [src, dst] of points) {
+                A.push([src.x, src.y, 1, 0, 0, 0, -dst.x * src.x, -dst.x * src.y]);
+                A.push([0, 0, 0, src.x, src.y, 1, -dst.y * src.x, -dst.y * src.y]);
+                b.push(dst.x); b.push(dst.y);
+            }
+            return solveLinearSystem(A, b);
+        };
+
+        const applyPerspectiveTransform = (sourceCanvas, srcPoints, width, height) => {
+            const destCanvas = document.createElement('canvas');
+            destCanvas.width = width; destCanvas.height = height;
+            const destCtx = destCanvas.getContext('2d');
+            const dstPoints = [{ x: 0, y: 0 }, { x: width, y: 0 }, { x: width, y: height }, { x: 0, y: height }];
+            const H = computePerspectiveTransform(dstPoints, srcPoints);
+            const sourceCtx = sourceCanvas.getContext('2d');
+            const sourceData = sourceCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+            const destData = destCtx.createImageData(width, height);
+            
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const denom = H[6] * x + H[7] * y + 1;
+                    const srcX = (H[0] * x + H[1] * y + H[2]) / denom;
+                    const srcY = (H[3] * x + H[4] * y + H[5]) / denom;
+                    const x0 = Math.floor(srcX), y0 = Math.floor(srcY);
+                    const x1 = x0 + 1, y1 = y0 + 1;
+                    
+                    if (x0 >= 0 && x1 < sourceCanvas.width && y0 >= 0 && y1 < sourceCanvas.height) {
+                        const fx = srcX - x0, fy = srcY - y0;
+                        for (let c = 0; c < 4; c++) {
+                            const v00 = sourceData.data[(y0 * sourceCanvas.width + x0) * 4 + c];
+                            const v10 = sourceData.data[(y0 * sourceCanvas.width + x1) * 4 + c];
+                            const v01 = sourceData.data[(y1 * sourceCanvas.width + x0) * 4 + c];
+                            const v11 = sourceData.data[(y1 * sourceCanvas.width + x1) * 4 + c];
+                            destData.data[(y * width + x) * 4 + c] = v00 * (1 - fx) * (1 - fy) + v10 * fx * (1 - fy) + v01 * (1 - fx) * fy + v11 * fx * fy;
+                        }
+                    } else {
+                        const idx = (y * width + x) * 4;
+                        destData.data[idx] = 255; destData.data[idx + 1] = 255; destData.data[idx + 2] = 255; destData.data[idx + 3] = 255;
+                    }
+                }
+            }
+            destCtx.putImageData(destData, 0, 0);
+            return destCanvas;
+        };
+
+        // --- Main App ---
         function DocuScanPro() {
             const [pages, setPages] = useState([]);
             const [activePageId, setActivePageId] = useState(null);
             const [zoom, setZoom] = useState(60);
             const [isProcessing, setIsProcessing] = useState(false);
-            const [processingMessage, setProcessingMessage] = useState("Processing...");
             const [rightPanelOpen, setRightPanelOpen] = useState(true);
             const [activeTool, setActiveTool] = useState("enhance");
+            const [enhanceMode, setEnhanceMode] = useState("auto");
             
-            // Cropping State
-            const [cropSelection, setCropSelection] = useState(null);
-            const [isDragging, setIsDragging] = useState(false);
-            const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+            // Crop state - 4 corner points (relative to displayed canvas size)
+            const [cropPoints, setCropPoints] = useState(null);
+            const [isDraggingPoint, setIsDraggingPoint] = useState(null);
+            const [cropMode, setCropMode] = useState(false);
 
-            // Painting State
-            const [brushColor, setBrushColor] = useState("#ef4444"); // Default Red
+            // Paint state - white/black only
+            const [brushColor, setBrushColor] = useState("#000000");
             const [brushSize, setBrushSize] = useState(5);
+            const [isPainting, setIsPainting] = useState(false);
             
             const canvasRef = useRef(null);
             const containerRef = useRef(null);
+            const viewerRef = useRef(null);
             const fileInputRef = useRef(null);
 
-            // Load PDF.js dynamically
+            const paintColors = [
+                '#000000', '#1a1a1a', '#333333', '#4d4d4d', '#666666', '#808080',
+                '#999999', '#b3b3b3', '#cccccc', '#e6e6e6', '#f2f2f2', '#ffffff',
+            ];
+
             useEffect(() => {
                 if (!window.pdfjsLib) {
                     const script = document.createElement('script');
@@ -135,266 +408,114 @@
                     script.async = true;
                     script.onload = () => {
                         window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-                        console.log("PDF.js loaded");
                     };
                     document.body.appendChild(script);
                 }
             }, []);
 
-            // Removed Initial Demo Image to fix "Tainted Canvas" error
-
             const activePage = pages.find(p => p.id === activePageId);
 
-            // File Handling
+            // Auto-fit zoom
+            useEffect(() => {
+                if (activePage && containerRef.current) {
+                    const container = containerRef.current;
+                    const padding = 64;
+                    const availW = container.clientWidth - padding;
+                    const availH = container.clientHeight - padding;
+                    if (availW > 0 && availH > 0) {
+                        const scaleX = availW / activePage.width;
+                        const scaleY = availH / activePage.height;
+                        setZoom(Math.floor(Math.min(scaleX, scaleY) * 95));
+                    }
+                }
+            }, [activePage?.id, activePage?.width, activePage?.height]);
+
+            // Initialize crop points when entering crop mode (centered, within bounds)
+            useEffect(() => {
+                if (cropMode && activePage && viewerRef.current && !cropPoints) {
+                    const rect = viewerRef.current.getBoundingClientRect();
+                    const padding = Math.min(rect.width, rect.height) * 0.1;
+                    setCropPoints([
+                        { x: padding, y: padding },
+                        { x: rect.width - padding, y: padding },
+                        { x: rect.width - padding, y: rect.height - padding },
+                        { x: padding, y: rect.height - padding }
+                    ]);
+                }
+            }, [cropMode, activePage]);
+
             const handleFileUpload = async (e) => {
                 const files = Array.from(e.target.files);
                 if (files.length === 0) return;
-                
                 setIsProcessing(true);
-                setProcessingMessage("Importing...");
-
                 for (const file of files) {
                     if (file.type === 'application/pdf') {
-                        if (!window.pdfjsLib) {
-                            alert("PDF Library loading. Try again shortly.");
-                            setIsProcessing(false);
-                            return;
-                        }
+                        if (!window.pdfjsLib) { alert("Loading PDF engine..."); setIsProcessing(false); return; }
                         try {
                             const arrayBuffer = await file.arrayBuffer();
                             const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-                            
                             for (let i = 1; i <= pdf.numPages; i++) {
-                                setProcessingMessage(`Importing Page ${i}/${pdf.numPages}...`);
                                 const page = await pdf.getPage(i);
                                 const viewport = page.getViewport({ scale: 2.0 });
-                                
                                 const offscreenCanvas = document.createElement('canvas');
-                                offscreenCanvas.width = viewport.width;
-                                offscreenCanvas.height = viewport.height;
-                                const offscreenCtx = offscreenCanvas.getContext('2d');
-                                
-                                await page.render({ canvasContext: offscreenCtx, viewport }).promise;
+                                offscreenCanvas.width = viewport.width; offscreenCanvas.height = viewport.height;
+                                await page.render({ canvasContext: offscreenCanvas.getContext('2d'), viewport }).promise;
                                 const imgData = offscreenCanvas.toDataURL('image/jpeg', 0.85);
-                                
-                                const newPage = {
-                                    id: Date.now() + Math.random(),
-                                    src: imgData,
-                                    originalSrc: imgData,
-                                    name: `${file.name} - ${i}`,
-                                    width: viewport.width,
-                                    height: viewport.height,
-                                    rotation: 0
-                                };
+                                const newPage = { id: Date.now() + Math.random(), src: imgData, originalSrc: imgData, name: `${file.name}-${i}`, width: viewport.width, height: viewport.height };
                                 setPages(prev => [...prev, newPage]);
                                 if (i === 1 && !activePageId) setActivePageId(newPage.id);
                             }
-                        } catch (err) {
-                            console.error(err);
-                            alert("PDF Load Error: " + err.message);
-                        }
+                        } catch (err) { alert("PDF Error: " + err.message); }
                     } else if (file.type.startsWith('image/')) {
                         await new Promise((resolve) => {
                             const reader = new FileReader();
-                            reader.onload = (event) => {
+                            reader.onload = (ev) => {
                                 const img = new Image();
                                 img.onload = () => {
-                                    const newPage = {
-                                        id: Date.now() + Math.random(),
-                                        src: event.target.result,
-                                        originalSrc: event.target.result,
-                                        name: file.name,
-                                        width: img.width,
-                                        height: img.height,
-                                        rotation: 0
-                                    };
+                                    const newPage = { id: Date.now() + Math.random(), src: ev.target.result, originalSrc: ev.target.result, name: file.name, width: img.width, height: img.height };
                                     setPages(prev => [...prev, newPage]);
                                     if (!activePageId) setActivePageId(newPage.id);
                                     resolve();
                                 };
-                                img.src = event.target.result;
+                                img.src = ev.target.result;
                             };
                             reader.readAsDataURL(file);
                         });
                     }
                 }
-                if (!activePageId && pages.length > 0) setActivePageId(pages[pages.length - 1].id);
                 setIsProcessing(false);
                 if (fileInputRef.current) fileInputRef.current.value = '';
             };
 
-            // Canvas Renderer
             useEffect(() => {
                 if (!activePage || !canvasRef.current) return;
                 const canvas = canvasRef.current;
                 const ctx = canvas.getContext('2d');
                 const img = new Image();
                 img.onload = () => {
-                    canvas.width = activePage.width;
-                    canvas.height = activePage.height;
+                    canvas.width = activePage.width; canvas.height = activePage.height;
                     ctx.drawImage(img, 0, 0);
                 };
                 img.src = activePage.src;
-            }, [activePage?.src, activePage?.width, activePage?.height]); 
+            }, [activePage?.src]);
 
-            // Operations
             const applyFilter = () => {
-                if (!activePage || !canvasRef.current) return;
+                if (!activePage) return;
                 setIsProcessing(true);
-                setProcessingMessage("Enhancing...");
-
                 setTimeout(() => {
                     const canvas = canvasRef.current;
-                    const ctx = canvas.getContext('2d');
-                    applyOmniFilter(ctx, canvas.width, canvas.height, 130);
-                    const newSrc = canvas.toDataURL('image/jpeg', 0.8);
-                    
-                    setPages(prev => prev.map(p => 
-                        p.id === activePageId ? { ...p, src: newSrc } : p
-                    ));
+                    applyDocumentEnhancement(canvas.getContext('2d'), canvas.width, canvas.height, enhanceMode);
+                    const newSrc = canvas.toDataURL('image/jpeg', 0.9);
+                    setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: newSrc } : p));
                     setIsProcessing(false);
                 }, 50);
             };
 
             const resetImage = () => {
                 if (!activePage) return;
-                setPages(prev => prev.map(p => 
-                    p.id === activePageId ? { ...p, src: p.originalSrc, rotation: 0 } : p
-                ));
-                setCropSelection(null);
-            };
-
-            // --- EXPORT LOGIC ---
-            const exportJPG = () => {
-                if(!activePage || !canvasRef.current) return;
-                try {
-                    const link = document.createElement('a');
-                    link.download = `docuscan-${activePage.name || 'page'}.jpg`;
-                    link.href = canvasRef.current.toDataURL('image/jpeg', 0.9);
-                    link.click();
-                } catch (e) {
-                    console.error(e);
-                    alert("Export failed: " + e.message);
-                }
-            };
-
-            const exportPDF = () => {
-                if(!activePage || !canvasRef.current) return;
-                try {
-                    const { jsPDF } = window.jspdf;
-                    if(!jsPDF) { alert("PDF library not ready"); return; }
-                    
-                    const canvas = canvasRef.current;
-                    // Determine orientation based on aspect ratio
-                    const orientation = canvas.width > canvas.height ? 'l' : 'p';
-                    const doc = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height] });
-                    
-                    doc.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, canvas.width, canvas.height);
-                    doc.save(`docuscan-export.pdf`);
-                } catch (e) {
-                     console.error(e);
-                     alert("Export failed: " + e.message);
-                }
-            };
-
-            // --- INTERACTIONS (Crop + Paint) ---
-            const handleMouseDown = (e) => {
-                if (!activePage) return;
-                const rect = canvasRef.current.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
-                
-                // Scale mouse pos to internal canvas resolution
-                const scaleX = canvasRef.current.width / rect.width;
-                const scaleY = canvasRef.current.height / rect.height;
-                const canvasX = x * scaleX;
-                const canvasY = y * scaleY;
-
-                setDragStart({ x, y }); // Screen coords for crop box
-                setIsDragging(true);
-
-                if (activeTool === 'edit') {
-                    setCropSelection({ x, y, w: 0, h: 0 });
-                } else if (activeTool === 'paint') {
-                    const ctx = canvasRef.current.getContext('2d');
-                    ctx.beginPath();
-                    ctx.moveTo(canvasX, canvasY);
-                    ctx.lineCap = 'round';
-                    ctx.lineJoin = 'round';
-                    ctx.strokeStyle = brushColor;
-                    ctx.lineWidth = brushSize * scaleX; // Adjust brush size for zoom/resolution
-                }
-            };
-
-            const handleMouseMove = (e) => {
-                if (!isDragging || !activePage) return;
-                const rect = canvasRef.current.getBoundingClientRect();
-                const currentX = e.clientX - rect.left;
-                const currentY = e.clientY - rect.top;
-
-                if (activeTool === 'edit') {
-                    const w = currentX - dragStart.x;
-                    const h = currentY - dragStart.y;
-                    setCropSelection({
-                        x: w > 0 ? dragStart.x : currentX,
-                        y: h > 0 ? dragStart.y : currentY,
-                        w: Math.abs(w),
-                        h: Math.abs(h)
-                    });
-                } else if (activeTool === 'paint') {
-                    // Paint Logic
-                    const scaleX = canvasRef.current.width / rect.width;
-                    const scaleY = canvasRef.current.height / rect.height;
-                    const canvasX = currentX * scaleX;
-                    const canvasY = currentY * scaleY;
-
-                    const ctx = canvasRef.current.getContext('2d');
-                    ctx.lineTo(canvasX, canvasY);
-                    ctx.stroke();
-                }
-            };
-
-            const handleMouseUp = () => { 
-                if (!isDragging) return;
-                setIsDragging(false);
-
-                if (activeTool === 'paint') {
-                    // Commit the paint to state so it persists on re-renders (like zooming)
-                    const canvas = canvasRef.current;
-                    const newSrc = canvas.toDataURL('image/jpeg', 0.9);
-                    setPages(prev => prev.map(p => 
-                        p.id === activePageId ? { ...p, src: newSrc } : p
-                    ));
-                }
-            };
-
-            const executeCrop = () => {
-                if (!cropSelection || !canvasRef.current || !activePage) return;
-                const canvas = canvasRef.current;
-                const rect = canvas.getBoundingClientRect();
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
-
-                const actualX = cropSelection.x * scaleX;
-                const actualY = cropSelection.y * scaleY;
-                const actualW = cropSelection.w * scaleX;
-                const actualH = cropSelection.h * scaleY;
-
-                if (actualW < 10 || actualH < 10) return; 
-
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = actualW;
-                tempCanvas.height = actualH;
-                const tempCtx = tempCanvas.getContext('2d');
-
-                tempCtx.drawImage(canvas, actualX, actualY, actualW, actualH, 0, 0, actualW, actualH);
-
-                const newSrc = tempCanvas.toDataURL('image/jpeg', 0.9);
-                
-                setPages(prev => prev.map(p => 
-                    p.id === activePageId ? { ...p, src: newSrc, width: actualW, height: actualH } : p
-                ));
-                setCropSelection(null);
+                setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: p.originalSrc } : p));
+                setCropPoints(null);
+                setCropMode(false);
             };
 
             const rotateActivePage = () => {
@@ -408,242 +529,359 @@
                     ctx.translate(canvas.width/2, canvas.height/2);
                     ctx.rotate(90 * Math.PI / 180);
                     ctx.drawImage(img, -activePage.width/2, -activePage.height/2);
-                    
                     const newSrc = canvas.toDataURL();
-                    setPages(prev => prev.map(p => 
-                        p.id === activePageId ? { ...p, src: newSrc, width: canvas.width, height: canvas.height } : p
-                    ));
+                    setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: newSrc, width: canvas.width, height: canvas.height } : p));
                 };
                 img.src = activePage.src;
             };
 
-            const deletePage = (id, e) => {
+            // Crop point dragging (constrained within bounds)
+            const handleCropPointMouseDown = (index, e) => {
+                e.preventDefault();
                 e.stopPropagation();
-                const newPages = pages.filter(p => p.id !== id);
-                setPages(newPages);
-                if (activePageId === id && newPages.length > 0) setActivePageId(newPages[0].id);
-                else if (newPages.length === 0) setActivePageId(null);
+                setIsDraggingPoint(index);
+            };
+
+            const handleViewerMouseMove = (e) => {
+                if (isDraggingPoint === null || !cropPoints || !viewerRef.current) return;
+                const rect = viewerRef.current.getBoundingClientRect();
+                // Constrain to document bounds
+                const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+                const y = Math.max(0, Math.min(e.clientY - rect.top, rect.height));
+                setCropPoints(prev => {
+                    const newPoints = [...prev];
+                    newPoints[isDraggingPoint] = { x, y };
+                    return newPoints;
+                });
+            };
+
+            const handleViewerMouseUp = () => {
+                if (isDraggingPoint !== null) setIsDraggingPoint(null);
+                if (isPainting) {
+                    setIsPainting(false);
+                    const newSrc = canvasRef.current.toDataURL('image/jpeg', 0.9);
+                    setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: newSrc } : p));
+                }
+            };
+
+            const executePerspectiveCrop = () => {
+                if (!cropPoints || !canvasRef.current || !activePage || !viewerRef.current) return;
+                setIsProcessing(true);
+                setTimeout(() => {
+                    const canvas = canvasRef.current;
+                    const rect = viewerRef.current.getBoundingClientRect();
+                    const scaleX = canvas.width / rect.width;
+                    const scaleY = canvas.height / rect.height;
+                    const scaledPoints = cropPoints.map(p => ({ x: p.x * scaleX, y: p.y * scaleY }));
+                    
+                    const width1 = Math.sqrt(Math.pow(scaledPoints[1].x - scaledPoints[0].x, 2) + Math.pow(scaledPoints[1].y - scaledPoints[0].y, 2));
+                    const width2 = Math.sqrt(Math.pow(scaledPoints[2].x - scaledPoints[3].x, 2) + Math.pow(scaledPoints[2].y - scaledPoints[3].y, 2));
+                    const height1 = Math.sqrt(Math.pow(scaledPoints[3].x - scaledPoints[0].x, 2) + Math.pow(scaledPoints[3].y - scaledPoints[0].y, 2));
+                    const height2 = Math.sqrt(Math.pow(scaledPoints[2].x - scaledPoints[1].x, 2) + Math.pow(scaledPoints[2].y - scaledPoints[1].y, 2));
+                    const outputWidth = Math.round(Math.max(width1, width2));
+                    const outputHeight = Math.round(Math.max(height1, height2));
+                    
+                    try {
+                        const resultCanvas = applyPerspectiveTransform(canvas, scaledPoints, outputWidth, outputHeight);
+                        const newSrc = resultCanvas.toDataURL('image/jpeg', 0.9);
+                        setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: newSrc, width: outputWidth, height: outputHeight } : p));
+                        setCropPoints(null);
+                        setCropMode(false);
+                    } catch (err) { alert("Crop failed: " + err.message); }
+                    setIsProcessing(false);
+                }, 50);
+            };
+
+            // Paint handlers
+            const handlePaintMouseDown = (e) => {
+                if (!activePage || activeTool !== 'paint' || cropMode) return;
+                const rect = canvasRef.current.getBoundingClientRect();
+                const scaleX = canvasRef.current.width / rect.width;
+                const scaleY = canvasRef.current.height / rect.height;
+                const canvasX = (e.clientX - rect.left) * scaleX;
+                const canvasY = (e.clientY - rect.top) * scaleY;
+                
+                const ctx = canvasRef.current.getContext('2d');
+                ctx.beginPath();
+                ctx.moveTo(canvasX, canvasY);
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.strokeStyle = brushColor;
+                ctx.lineWidth = brushSize * scaleX;
+                setIsPainting(true);
+            };
+
+            const handlePaintMouseMove = (e) => {
+                if (!isPainting || !activePage) return;
+                const rect = canvasRef.current.getBoundingClientRect();
+                const scaleX = canvasRef.current.width / rect.width;
+                const scaleY = canvasRef.current.height / rect.height;
+                const canvasX = (e.clientX - rect.left) * scaleX;
+                const canvasY = (e.clientY - rect.top) * scaleY;
+                const ctx = canvasRef.current.getContext('2d');
+                ctx.lineTo(canvasX, canvasY);
+                ctx.stroke();
+            };
+
+            const exportFile = (type) => {
+                if (!activePage || !canvasRef.current) return;
+                const canvas = canvasRef.current;
+                if (type === 'jpg') {
+                    const link = document.createElement('a');
+                    link.download = `doc-${activePage.name}.jpg`;
+                    link.href = canvas.toDataURL('image/jpeg', 0.9);
+                    link.click();
+                } else {
+                    const { jsPDF } = window.jspdf;
+                    if (!jsPDF) return alert("PDF Engine not loaded");
+                    const orient = canvas.width > canvas.height ? 'l' : 'p';
+                    const doc = new jsPDF({ orientation: orient, unit: 'px', format: [canvas.width, canvas.height] });
+                    doc.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, canvas.width, canvas.height);
+                    doc.save(`doc-${activePage.name}.pdf`);
+                }
+            };
+
+            const renderCropOverlay = () => {
+                if (!cropMode || !cropPoints) return null;
+                const pathData = `M ${cropPoints[0].x} ${cropPoints[0].y} L ${cropPoints[1].x} ${cropPoints[1].y} L ${cropPoints[2].x} ${cropPoints[2].y} L ${cropPoints[3].x} ${cropPoints[3].y} Z`;
+                
+                return (
+                    <div className="absolute inset-0 z-20" onMouseMove={handleViewerMouseMove} onMouseUp={handleViewerMouseUp} onMouseLeave={handleViewerMouseUp}>
+                        <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                            <defs>
+                                <mask id="cropMask">
+                                    <rect width="100%" height="100%" fill="white" />
+                                    <path d={pathData} fill="black" />
+                                </mask>
+                            </defs>
+                            <rect width="100%" height="100%" fill="rgba(0,0,0,0.4)" mask="url(#cropMask)" />
+                            <path d={pathData} fill="none" stroke="hsl(240, 5.9%, 10%)" strokeWidth="2" />
+                            <line x1={(cropPoints[0].x + cropPoints[1].x) / 2} y1={(cropPoints[0].y + cropPoints[1].y) / 2}
+                                  x2={(cropPoints[3].x + cropPoints[2].x) / 2} y2={(cropPoints[3].y + cropPoints[2].y) / 2}
+                                  stroke="hsl(240, 5.9%, 10%)" strokeWidth="1" strokeDasharray="4,4" opacity="0.5" />
+                            <line x1={(cropPoints[0].x + cropPoints[3].x) / 2} y1={(cropPoints[0].y + cropPoints[3].y) / 2}
+                                  x2={(cropPoints[1].x + cropPoints[2].x) / 2} y2={(cropPoints[1].y + cropPoints[2].y) / 2}
+                                  stroke="hsl(240, 5.9%, 10%)" strokeWidth="1" strokeDasharray="4,4" opacity="0.5" />
+                        </svg>
+                        {cropPoints.map((point, index) => (
+                            <div key={index} className="crop-handle" style={{ left: point.x, top: point.y }} onMouseDown={(e) => handleCropPointMouseDown(index, e)} />
+                        ))}
+                    </div>
+                );
             };
 
             return (
-                <div className="flex flex-col h-screen w-full bg-slate-100 font-sans text-slate-900 overflow-hidden">
-                    {/* Header */}
-                    <header className="h-14 bg-[#2f2f2f] text-white flex items-center px-4 justify-between flex-shrink-0 z-50 shadow-md">
-                        <div className="flex items-center gap-6">
-                            <div className="flex items-center gap-2">
-                                <div className="bg-red-600 p-1 rounded-sm">
-                                    <FileText className="w-5 h-5 text-white" />
-                                </div>
-                                <span className="font-semibold text-lg tracking-tight">DocuScan Pro</span>
+                <div className="flex flex-col h-screen w-full bg-background font-sans">
+                    
+                    <header className="h-14 border-b flex items-center justify-between px-6 bg-background/80 backdrop-blur-sm z-50">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                                <ScanLine className="w-5 h-5 text-primary-foreground" />
                             </div>
+                            <span className="font-semibold text-lg tracking-tight">simple</span>
                         </div>
-                        <div className="flex items-center gap-3">
-                            <Button variant="ghost" className="text-white hover:bg-white/10 h-8 px-3" onClick={() => fileInputRef.current.click()}>
-                                <ImageIcon className="w-4 h-4 mr-2" />
-                                Add Page / PDF
-                            </Button>
+                        <div className="flex items-center gap-2">
+                             <Button variant="outline" size="sm" onClick={() => fileInputRef.current.click()}>
+                                <Plus className="w-4 h-4 mr-2" /> Add Pages
+                             </Button>
+                             <div className="flex items-center border rounded-md ml-2">
+                                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none" onClick={() => setZoom(z => Math.max(10, z - 10))}><ZoomOut className="w-3 h-3" /></Button>
+                                <span className="w-12 text-center text-xs font-medium">{zoom}%</span>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none" onClick={() => setZoom(z => Math.min(200, z + 10))}><ZoomIn className="w-3 h-3" /></Button>
+                            </div>
                         </div>
                     </header>
 
-                    {/* Toolbar */}
-                    <div className="h-12 bg-white border-b border-slate-200 flex items-center px-4 justify-between flex-shrink-0">
-                        <div className="flex items-center gap-2">
-                            <Button variant="ghost" size="icon" className="text-slate-600"><Menu className="w-5 h-5" /></Button>
-                            <Separator orientation="vertical" className="h-6 mx-2" />
-                            <Button variant="ghost" size="icon" className="text-slate-600" onClick={exportJPG}><Save className="w-5 h-5" /></Button>
-                            <Button variant="ghost" size="icon" className="text-slate-600" onClick={exportPDF}><Download className="w-5 h-5" /></Button>
-                            <Separator orientation="vertical" className="h-6 mx-2" />
-                            <div className="flex items-center bg-slate-100 rounded-md px-2 py-1 gap-2">
-                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setZoom(z => Math.max(10, z - 10))}><ZoomOut className="w-3 h-3" /></Button>
-                                <span className="text-xs font-medium w-12 text-center">{zoom}%</span>
-                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setZoom(z => Math.min(200, z + 10))}><ZoomIn className="w-3 h-3" /></Button>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <div className={cn("p-1 rounded", (activeTool === 'edit' || activeTool === 'paint') ? "bg-slate-200" : "")}>
-                                <MousePointer2 className="w-4 h-4 text-slate-600" />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Main Workspace */}
                     <div className="flex-1 flex overflow-hidden">
-                        {/* Sidebar */}
-                        <div className="w-64 bg-slate-50 border-r border-slate-200 flex flex-col flex-shrink-0">
-                            <div className="p-3 flex items-center justify-between border-b border-slate-200/50">
-                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Pages</span>
-                                <Layers className="w-4 h-4 text-slate-500" />
+                        
+                        <div className="w-64 border-r bg-muted/10 flex flex-col">
+                            <div className="p-4 border-b flex items-center justify-between">
+                                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Documents</span>
+                                <span className="text-xs text-muted-foreground">{pages.length} Pages</span>
                             </div>
                             <div className="flex-1 overflow-y-auto p-4 space-y-4">
                                 {pages.map((page, idx) => (
-                                    <div 
-                                        key={page.id} onClick={() => setActivePageId(page.id)}
-                                        className={cn("group relative aspect-[3/4] bg-white shadow-sm border-2 transition-all cursor-pointer rounded-sm overflow-hidden", activePageId === page.id ? "border-blue-500 ring-2 ring-blue-500/20" : "border-transparent hover:border-slate-300")}
-                                    >
-                                        <img src={page.src} className="w-full h-full object-cover opacity-90 group-hover:opacity-100" />
-                                        <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={(e) => deletePage(page.id, e)} className="bg-red-500 text-white p-1 rounded hover:bg-red-600"><Trash2 className="w-3 h-3" /></button>
+                                    <div key={page.id} onClick={() => { setActivePageId(page.id); setCropMode(false); setCropPoints(null); }}
+                                         className={cn("group relative aspect-[3/4] border-2 rounded-lg overflow-hidden cursor-pointer transition-all hover:border-primary/50", activePageId === page.id ? "border-primary ring-2 ring-primary/10" : "border-border bg-white")}>
+                                        <img src={page.src} className="w-full h-full object-cover" />
+                                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <Button variant="destructive" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); const np = pages.filter(p => p.id !== page.id); setPages(np); if(activePageId === page.id) setActivePageId(np[0]?.id || null); }}>
+                                                <Trash2 className="w-3 h-3" />
+                                            </Button>
                                         </div>
-                                        <div className="absolute bottom-0 left-0 bg-slate-900/50 text-white text-[10px] px-2 py-0.5 backdrop-blur-sm rounded-tr">{idx + 1}</div>
+                                        <div className="absolute bottom-0 inset-x-0 bg-background/90 border-t p-1 text-center text-[10px] font-medium text-muted-foreground truncate px-2">{idx + 1}. {page.name}</div>
                                     </div>
                                 ))}
-                                <div onClick={() => fileInputRef.current.click()} className="aspect-[3/4] border-2 border-dashed border-slate-300 rounded-sm flex flex-col items-center justify-center cursor-pointer hover:bg-slate-200/50 transition-colors text-slate-400 hover:text-slate-600">
-                                    <ImageIcon className="w-8 h-8 mb-2" />
-                                    <span className="text-xs font-medium">Add PDF / IMG</span>
-                                </div>
+                                {pages.length === 0 && (
+                                    <div className="text-center p-8 border-2 border-dashed rounded-lg border-muted-foreground/25">
+                                        <p className="text-sm text-muted-foreground">No pages</p>
+                                    </div>
+                                )}
                             </div>
-                            <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" multiple accept="image/*,application/pdf" />
                         </div>
 
-                        {/* Viewer */}
-                        <div ref={containerRef} className="flex-1 bg-slate-200/50 overflow-auto flex justify-center p-8">
+                        <div ref={containerRef} className="flex-1 bg-muted/10 bg-dot-pattern flex items-center justify-center overflow-auto relative p-8">
                             {activePage ? (
-                                <div 
-                                    style={{ 
-                                        width: `${activePage.width * (zoom / 100)}px`,
-                                        height: `${activePage.height * (zoom / 100)}px`,
-                                        transition: 'width 0.2s ease-out, height 0.2s ease-out' 
-                                    }}
-                                    className="relative shadow-xl flex-shrink-0"
-                                    onMouseDown={handleMouseDown}
-                                    onMouseMove={handleMouseMove}
-                                    onMouseUp={handleMouseUp}
-                                    onMouseLeave={handleMouseUp}
-                                >
-                                    <canvas ref={canvasRef} 
-                                        className={cn(
-                                            "w-full h-full block bg-white", 
-                                            activeTool === 'edit' ? "cursor-crosshair" : "",
-                                            activeTool === 'paint' ? "cursor-cell" : "cursor-default"
-                                        )} 
-                                    />
+                                <div ref={viewerRef}
+                                     className="relative shadow-xl transition-all duration-200 ease-out bg-white" 
+                                     style={{ width: `${activePage.width * (zoom / 100)}px`, height: `${activePage.height * (zoom / 100)}px` }}
+                                     onMouseDown={handlePaintMouseDown} 
+                                     onMouseMove={(e) => { handleViewerMouseMove(e); handlePaintMouseMove(e); }} 
+                                     onMouseUp={handleViewerMouseUp} 
+                                     onMouseLeave={handleViewerMouseUp}>
+                                    
+                                    <canvas ref={canvasRef} className={cn("w-full h-full block", cropMode ? "cursor-default" : activeTool === 'paint' ? "cursor-cell" : "cursor-default")} />
                                     
                                     {isProcessing && (
-                                        <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex items-center justify-center z-20">
-                                            <div className="flex flex-col items-center animate-pulse">
-                                                <ScanLine className="w-12 h-12 text-blue-600 mb-2" />
-                                                <span className="font-semibold text-blue-800">{processingMessage}</span>
+                                        <div className="absolute inset-0 bg-white/50 backdrop-blur-[2px] flex items-center justify-center z-30">
+                                            <div className="bg-white px-6 py-3 rounded-full shadow-lg border flex items-center gap-3">
+                                                <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                                <span className="text-sm font-medium">Processing...</span>
                                             </div>
                                         </div>
                                     )}
 
-                                    {activeTool === 'edit' && cropSelection && (
-                                        <div 
-                                            className="absolute border-2 border-blue-500 bg-blue-500/10 z-10 pointer-events-none"
-                                            style={{ left: cropSelection.x, top: cropSelection.y, width: cropSelection.w, height: cropSelection.h }}
-                                        >
-                                            <div className="absolute -top-6 left-0 bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded">
-                                                Selection ({Math.round(cropSelection.w)} x {Math.round(cropSelection.h)})
-                                            </div>
-                                        </div>
-                                    )}
+                                    {renderCropOverlay()}
                                 </div>
                             ) : (
-                                <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                                    <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mb-4"><FileType className="w-10 h-10 text-slate-300" /></div>
-                                    <p className="text-lg font-medium text-slate-500">No document loaded</p>
+                                <div className="text-center">
+                                    <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                        <ImageIcon className="w-8 h-8 text-muted-foreground" />
+                                    </div>
+                                    <h3 className="text-lg font-semibold">No Document Selected</h3>
+                                    <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto">Upload a PDF or Image to start editing, enhancing, and exporting.</p>
+                                    <Button className="mt-4" onClick={() => fileInputRef.current.click()}>Upload File</Button>
                                 </div>
                             )}
                         </div>
 
-                        {/* Tools */}
-                        <div className={cn("bg-white border-l border-slate-200 flex flex-col transition-all duration-300 ease-in-out shadow-lg z-20", rightPanelOpen ? "w-80" : "w-12")}>
-                            <button onClick={() => setRightPanelOpen(!rightPanelOpen)} className="h-8 w-full border-b border-slate-100 flex items-center justify-center hover:bg-slate-50 text-slate-400">
-                                {rightPanelOpen ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-                            </button>
+                        <div className={cn("bg-background border-l flex flex-col transition-all duration-300", rightPanelOpen ? "w-80" : "w-14")}>
+                            <div className="h-12 border-b flex items-center px-2 justify-between">
+                                {rightPanelOpen && <span className="font-semibold text-sm px-2">Tools</span>}
+                                <Button variant="ghost" size="icon" onClick={() => setRightPanelOpen(!rightPanelOpen)}>
+                                    {rightPanelOpen ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+                                </Button>
+                            </div>
 
-                            {rightPanelOpen ? (
-                                <div className="flex flex-col h-full">
-                                    <div className="p-4 border-b border-slate-100"><h2 className="font-semibold text-slate-800">Tools</h2></div>
-                                    <div className="flex-1 overflow-y-auto">
-                                        <div className="grid grid-cols-4 p-2 gap-1 bg-slate-50/50 border-b border-slate-100">
-                                            {['enhance', 'edit', 'paint', 'export'].map(tool => (
-                                                <button key={tool} onClick={() => { setActiveTool(tool); setCropSelection(null); }} className={cn("text-xs font-medium py-2 rounded-md capitalize transition-all", activeTool === tool ? "bg-white text-blue-600 shadow-sm border border-slate-200" : "text-slate-500 hover:text-slate-800")}>{tool}</button>
-                                            ))}
-                                        </div>
+                            <div className="flex-1 overflow-y-auto">
+                                <div className={cn("grid gap-1 p-2", rightPanelOpen ? "grid-cols-4" : "grid-cols-1")}>
+                                    {['enhance', 'edit', 'paint', 'export'].map(t => (
+                                        <button key={t} onClick={() => { setActiveTool(t); if (t !== 'edit') { setCropMode(false); setCropPoints(null); } if (!rightPanelOpen) setRightPanelOpen(true); }}
+                                                className={cn("flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 text-[10px] font-medium transition-colors uppercase", 
+                                                activeTool === t ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
+                                            {t === 'enhance' && <Sparkles className="w-4 h-4" />}
+                                            {t === 'edit' && <Crop className="w-4 h-4" />}
+                                            {t === 'paint' && <Paintbrush className="w-4 h-4" />}
+                                            {t === 'export' && <Download className="w-4 h-4" />}
+                                            {rightPanelOpen && <span>{t}</span>}
+                                        </button>
+                                    ))}
+                                </div>
+                                <Separator />
+                                
+                                {rightPanelOpen && activePage && (
+                                    <div className="p-4 space-y-6">
+                                        
+                                        {activeTool === 'enhance' && (
+                                            <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                                                <div>
+                                                    <h3 className="font-medium text-sm mb-1">Document Enhancement</h3>
+                                                    <p className="text-xs text-muted-foreground">Transform photos into clean scanned documents.</p>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    {[
+                                                        { id: 'auto', label: 'Auto', desc: 'Balanced' },
+                                                        { id: 'scan', label: 'Scan', desc: 'Clean B&W' },
+                                                        { id: 'lighten', label: 'Lighten', desc: 'Remove shadows' },
+                                                        { id: 'sharpen', label: 'Sharpen', desc: 'Increase clarity' }
+                                                    ].map(mode => (
+                                                        <button key={mode.id} onClick={() => setEnhanceMode(mode.id)}
+                                                            className={cn("p-2 rounded-md border text-left transition-all", 
+                                                            enhanceMode === mode.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/50")}>
+                                                            <div className="text-xs font-medium">{mode.label}</div>
+                                                            <div className="text-[10px] text-muted-foreground">{mode.desc}</div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                <Button className="w-full" onClick={applyFilter}><Wand2 className="w-4 h-4 mr-2" /> Apply Enhancement</Button>
+                                                <Button variant="outline" className="w-full" onClick={resetImage}><RefreshCw className="w-4 h-4 mr-2" /> Reset to Original</Button>
+                                                <Separator />
+                                                <Button variant="secondary" className="w-full" onClick={rotateActivePage}><RotateCw className="w-4 h-4 mr-2" /> Rotate 90°</Button>
+                                            </div>
+                                        )}
 
-                                        <div className="p-4 space-y-6">
-                                            {activeTool === 'enhance' && (
-                                                <div className="space-y-6">
-                                                    <div className="space-y-3">
-                                                        <div className="flex items-center gap-2 mb-2">
-                                                            <div className="bg-green-100 p-1.5 rounded text-green-700"><Wand2 className="w-4 h-4" /></div>
-                                                            <h3 className="font-medium text-slate-800">OmniFix Magic</h3>
+                                        {activeTool === 'edit' && (
+                                            <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                                                <div>
+                                                    <h3 className="font-medium text-sm mb-1">Perspective Crop</h3>
+                                                    <p className="text-xs text-muted-foreground">Drag the 4 corners to select your document. Corrects perspective automatically.</p>
+                                                </div>
+                                                {!cropMode ? (
+                                                    <Button className="w-full" onClick={() => setCropMode(true)}><Crop className="w-4 h-4 mr-2" /> Start Crop</Button>
+                                                ) : (
+                                                    <div className="space-y-2">
+                                                        <div className="bg-muted/50 p-3 rounded-md border text-xs text-center text-muted-foreground">
+                                                            Drag corner handles to adjust
                                                         </div>
-                                                        <p className="text-xs text-slate-500 leading-relaxed">One-click enhancement to remove shadows and increase readability.</p>
-                                                        <Button onClick={applyFilter} className="w-full bg-green-600 hover:bg-green-700 shadow-sm border-0" disabled={!activePage}><ScanLine className="w-4 h-4 mr-2" /> Apply Auto-Enhance</Button>
-                                                        <Button onClick={resetImage} variant="outline" className="w-full text-xs" disabled={!activePage}>Revert to Original</Button>
+                                                        <Button className="w-full" onClick={executePerspectiveCrop}><Check className="w-4 h-4 mr-2" /> Apply Crop</Button>
+                                                        <Button variant="ghost" className="w-full text-destructive hover:text-destructive" onClick={() => { setCropMode(false); setCropPoints(null); }}>Cancel</Button>
                                                     </div>
-                                                    <Separator />
-                                                    <div className="space-y-4">
-                                                        <h3 className="font-medium text-slate-800 text-sm">Adjustment</h3>
-                                                        <Button variant="secondary" className="w-full text-xs" onClick={rotateActivePage}><RotateCw className="w-3 h-3 mr-2" /> Rotate 90°</Button>
-                                                    </div>
-                                                </div>
-                                            )}
+                                                )}
+                                            </div>
+                                        )}
 
-                                            {activeTool === 'edit' && (
-                                                <div className="space-y-4">
-                                                    <div className="p-3 bg-yellow-50 border border-yellow-100 rounded-md">
-                                                        <h4 className="text-yellow-800 font-medium text-sm flex items-center"><Crop className="w-4 h-4 mr-2" /> Crop Page</h4>
-                                                        <p className="text-xs text-yellow-700 mt-1">Click and drag on the image to select the area you want to keep.</p>
-                                                    </div>
-                                                    {cropSelection ? (
-                                                        <div className="animate-in fade-in zoom-in duration-200">
-                                                            <Button className="w-full bg-slate-900 mb-2" onClick={executeCrop}><Check className="w-4 h-4 mr-2" /> Confirm Crop</Button>
-                                                            <Button variant="ghost" className="w-full text-red-500 hover:text-red-600" onClick={() => setCropSelection(null)}>Cancel Selection</Button>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="text-center p-4 border-2 border-dashed border-slate-200 rounded text-slate-400 text-xs">No selection active</div>
-                                                    )}
+                                        {activeTool === 'paint' && (
+                                            <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                                                <div>
+                                                    <h3 className="font-medium text-sm mb-1">Correction Tool</h3>
+                                                    <p className="text-xs text-muted-foreground">Use white to erase marks, black to fill text.</p>
                                                 </div>
-                                            )}
+                                                <div>
+                                                    <label className="text-xs font-medium mb-2 block">Shade</label>
+                                                    <div className="grid grid-cols-6 gap-1.5">
+                                                        {paintColors.map(c => (
+                                                            <button key={c} onClick={() => setBrushColor(c)} 
+                                                                className={cn("w-8 h-8 rounded border transition-all", brushColor === c ? "ring-2 ring-primary ring-offset-1 scale-110" : "border-border hover:scale-105")} 
+                                                                style={{ backgroundColor: c }} />
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs font-medium mb-2 block">Brush Size: {brushSize}px</label>
+                                                    <input type="range" min="1" max="30" value={brushSize} onChange={(e) => setBrushSize(parseInt(e.target.value))} className="w-full accent-primary" />
+                                                </div>
+                                            </div>
+                                        )}
 
-                                            {activeTool === 'paint' && (
-                                                <div className="space-y-4">
-                                                    <div className="p-3 bg-blue-50 border border-blue-100 rounded-md">
-                                                        <h4 className="text-blue-800 font-medium text-sm flex items-center"><Paintbrush className="w-4 h-4 mr-2" /> Paint Tool</h4>
-                                                        <p className="text-xs text-blue-700 mt-1">Draw directly on the document.</p>
-                                                    </div>
-                                                    <div className="space-y-3">
-                                                        <label className="text-xs font-medium text-slate-600">Color</label>
-                                                        <div className="flex gap-2">
-                                                            {['#ef4444', '#22c55e', '#3b82f6', '#000000', '#ffffff'].map(c => (
-                                                                <button 
-                                                                    key={c}
-                                                                    onClick={() => setBrushColor(c)}
-                                                                    className={cn("w-6 h-6 rounded-full border border-slate-200", brushColor === c ? "ring-2 ring-offset-1 ring-slate-900" : "")}
-                                                                    style={{ backgroundColor: c }}
-                                                                />
-                                                            ))}
-                                                        </div>
-                                                        <label className="text-xs font-medium text-slate-600 block mt-2">Brush Size: {brushSize}px</label>
-                                                        <input type="range" min="1" max="20" value={brushSize} onChange={(e) => setBrushSize(parseInt(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-900" />
-                                                    </div>
+                                        {activeTool === 'export' && (
+                                            <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                                                <div>
+                                                    <h3 className="font-medium text-sm mb-1">Export Page</h3>
+                                                    <p className="text-xs text-muted-foreground">Save current page to device.</p>
                                                 </div>
-                                            )}
-
-                                            {activeTool === 'export' && (
-                                                <div className="space-y-4">
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                        <div onClick={exportPDF} className="border rounded-md p-3 hover:bg-slate-50 cursor-pointer flex flex-col items-center gap-2 transition-colors"><FileText className="w-8 h-8 text-red-500" /><span className="text-xs font-medium">Download PDF</span></div>
-                                                        <div onClick={exportJPG} className="border rounded-md p-3 hover:bg-slate-50 cursor-pointer flex flex-col items-center gap-2 transition-colors"><ImageIcon className="w-8 h-8 text-blue-500" /><span className="text-xs font-medium">Download JPG</span></div>
-                                                    </div>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <button onClick={() => exportFile('pdf')} className="flex flex-col items-center justify-center p-4 rounded-lg border bg-card hover:bg-accent hover:text-accent-foreground transition-colors text-center gap-2">
+                                                        <FileText className="w-6 h-6 text-red-500" />
+                                                        <span className="text-xs font-medium">PDF</span>
+                                                    </button>
+                                                    <button onClick={() => exportFile('jpg')} className="flex flex-col items-center justify-center p-4 rounded-lg border bg-card hover:bg-accent hover:text-accent-foreground transition-colors text-center gap-2">
+                                                        <ImageIcon className="w-6 h-6 text-blue-500" />
+                                                        <span className="text-xs font-medium">JPG</span>
+                                                    </button>
                                                 </div>
-                                            )}
-                                        </div>
+                                            </div>
+                                        )}
                                     </div>
-                                </div>
-                            ) : (
-                                <div className="flex flex-col items-center py-4 gap-4">
-                                    <Button variant="ghost" size="icon" onClick={() => { setRightPanelOpen(true); setActiveTool('enhance'); }}><Wand2 className="w-5 h-5 text-green-600" /></Button>
-                                    <Button variant="ghost" size="icon" onClick={() => { setRightPanelOpen(true); setActiveTool('edit'); }}><Crop className="w-5 h-5 text-slate-500" /></Button>
-                                    <Button variant="ghost" size="icon" onClick={() => { setRightPanelOpen(true); setActiveTool('paint'); }}><Paintbrush className="w-5 h-5 text-blue-500" /></Button>
-                                    <Button variant="ghost" size="icon" onClick={() => { setRightPanelOpen(true); setActiveTool('export'); }}><Download className="w-5 h-5 text-slate-500" /></Button>
-                                </div>
-                            )}
+                                )}
+                                
+                                {rightPanelOpen && !activePage && (
+                                    <div className="p-8 text-center text-xs text-muted-foreground">Select a page to view tools.</div>
+                                )}
+                            </div>
                         </div>
                     </div>
+                    
+                    <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" multiple accept="image/*,application/pdf" />
                 </div>
             );
         }
