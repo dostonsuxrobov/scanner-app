@@ -1,1 +1,1 @@
-simple document improvment app for interal use 
+simple document improvment app 
