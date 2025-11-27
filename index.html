@@ -96,6 +96,21 @@
         .crop-handle:active {
             transform: translate(-50%, -50%) scale(1.3);
         }
+        /* Fix for proper scrolling when zoomed */
+        .scroll-container {
+            overflow: auto;
+            width: 100%;
+            height: 100%;
+        }
+        .scroll-content {
+            min-width: 100%;
+            min-height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 32px;
+            box-sizing: border-box;
+        }
     </style>
 </head>
 <body class="bg-background text-foreground antialiased">
@@ -111,7 +126,7 @@
           Image as ImageIcon, Wand2, ScanLine, Download, Trash2, 
           ChevronRight, ChevronLeft, 
           FileText, Crop, RotateCw, Check,
-          Paintbrush, Plus, RefreshCw, Sparkles
+          Paintbrush, Plus, RefreshCw, Sparkles, Undo2, Eraser
         } from 'https://esm.sh/lucide-react@0.294.0?deps=react@18.2.0';
 
         const cn = (...inputs) => twMerge(clsx(inputs));
@@ -388,13 +403,16 @@
 
             // Paint state - white/black only
             const [brushColor, setBrushColor] = useState("#000000");
-            const [brushSize, setBrushSize] = useState(5);
+            const [brushSize, setBrushSize] = useState(10);
             const [isPainting, setIsPainting] = useState(false);
+            const [paintHistory, setPaintHistory] = useState([]);
+            const [brushCursor, setBrushCursor] = useState({ x: 0, y: 0, visible: false });
             
             const canvasRef = useRef(null);
             const containerRef = useRef(null);
             const viewerRef = useRef(null);
             const fileInputRef = useRef(null);
+            const scrollContainerRef = useRef(null);
 
             const paintColors = [
                 '#000000', '#1a1a1a', '#333333', '#4d4d4d', '#666666', '#808080',
@@ -415,7 +433,7 @@
 
             const activePage = pages.find(p => p.id === activePageId);
 
-            // Auto-fit zoom
+            // Auto-fit zoom only when page changes
             useEffect(() => {
                 if (activePage && containerRef.current) {
                     const container = containerRef.current;
@@ -428,7 +446,7 @@
                         setZoom(Math.floor(Math.min(scaleX, scaleY) * 95));
                     }
                 }
-            }, [activePage?.id, activePage?.width, activePage?.height]);
+            }, [activePage?.id]);
 
             // Initialize crop points when entering crop mode (centered, within bounds)
             useEffect(() => {
@@ -460,7 +478,8 @@
                                 const offscreenCanvas = document.createElement('canvas');
                                 offscreenCanvas.width = viewport.width; offscreenCanvas.height = viewport.height;
                                 await page.render({ canvasContext: offscreenCanvas.getContext('2d'), viewport }).promise;
-                                const imgData = offscreenCanvas.toDataURL('image/jpeg', 0.85);
+                                // Use PNG for lossless internal storage
+                                const imgData = offscreenCanvas.toDataURL('image/png');
                                 const newPage = { id: Date.now() + Math.random(), src: imgData, originalSrc: imgData, name: `${file.name}-${i}`, width: viewport.width, height: viewport.height };
                                 setPages(prev => [...prev, newPage]);
                                 if (i === 1 && !activePageId) setActivePageId(newPage.id);
@@ -472,7 +491,14 @@
                             reader.onload = (ev) => {
                                 const img = new Image();
                                 img.onload = () => {
-                                    const newPage = { id: Date.now() + Math.random(), src: ev.target.result, originalSrc: ev.target.result, name: file.name, width: img.width, height: img.height };
+                                    // Convert to PNG for lossless internal storage
+                                    const tempCanvas = document.createElement('canvas');
+                                    tempCanvas.width = img.width;
+                                    tempCanvas.height = img.height;
+                                    const ctx = tempCanvas.getContext('2d');
+                                    ctx.drawImage(img, 0, 0);
+                                    const pngData = tempCanvas.toDataURL('image/png');
+                                    const newPage = { id: Date.now() + Math.random(), src: pngData, originalSrc: pngData, name: file.name, width: img.width, height: img.height };
                                     setPages(prev => [...prev, newPage]);
                                     if (!activePageId) setActivePageId(newPage.id);
                                     resolve();
@@ -505,7 +531,8 @@
                 setTimeout(() => {
                     const canvas = canvasRef.current;
                     applyDocumentEnhancement(canvas.getContext('2d'), canvas.width, canvas.height, enhanceMode);
-                    const newSrc = canvas.toDataURL('image/jpeg', 0.9);
+                    // Use PNG for lossless internal storage
+                    const newSrc = canvas.toDataURL('image/png');
                     setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: newSrc } : p));
                     setIsProcessing(false);
                 }, 50);
@@ -516,6 +543,7 @@
                 setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: p.originalSrc } : p));
                 setCropPoints(null);
                 setCropMode(false);
+                setPaintHistory([]);
             };
 
             const rotateActivePage = () => {
@@ -529,7 +557,8 @@
                     ctx.translate(canvas.width/2, canvas.height/2);
                     ctx.rotate(90 * Math.PI / 180);
                     ctx.drawImage(img, -activePage.width/2, -activePage.height/2);
-                    const newSrc = canvas.toDataURL();
+                    // Use PNG for lossless internal storage
+                    const newSrc = canvas.toDataURL('image/png');
                     setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: newSrc, width: canvas.width, height: canvas.height } : p));
                 };
                 img.src = activePage.src;
@@ -559,7 +588,8 @@
                 if (isDraggingPoint !== null) setIsDraggingPoint(null);
                 if (isPainting) {
                     setIsPainting(false);
-                    const newSrc = canvasRef.current.toDataURL('image/jpeg', 0.9);
+                    // Use PNG for lossless internal storage
+                    const newSrc = canvasRef.current.toDataURL('image/png');
                     setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: newSrc } : p));
                 }
             };
@@ -583,7 +613,8 @@
                     
                     try {
                         const resultCanvas = applyPerspectiveTransform(canvas, scaledPoints, outputWidth, outputHeight);
-                        const newSrc = resultCanvas.toDataURL('image/jpeg', 0.9);
+                        // Use PNG for lossless internal storage
+                        const newSrc = resultCanvas.toDataURL('image/png');
                         setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: newSrc, width: outputWidth, height: outputHeight } : p));
                         setCropPoints(null);
                         setCropMode(false);
@@ -595,13 +626,19 @@
             // Paint handlers
             const handlePaintMouseDown = (e) => {
                 if (!activePage || activeTool !== 'paint' || cropMode) return;
-                const rect = canvasRef.current.getBoundingClientRect();
-                const scaleX = canvasRef.current.width / rect.width;
-                const scaleY = canvasRef.current.height / rect.height;
+                
+                // Save current canvas state before painting
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                setPaintHistory(prev => [...prev.slice(-19), imageData]); // Keep last 20 states
+                
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
                 const canvasX = (e.clientX - rect.left) * scaleX;
                 const canvasY = (e.clientY - rect.top) * scaleY;
                 
-                const ctx = canvasRef.current.getContext('2d');
                 ctx.beginPath();
                 ctx.moveTo(canvasX, canvasY);
                 ctx.lineCap = 'round';
@@ -611,7 +648,36 @@
                 setIsPainting(true);
             };
 
+            const undoLastStroke = () => {
+                if (paintHistory.length === 0 || !canvasRef.current) return;
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                const lastState = paintHistory[paintHistory.length - 1];
+                ctx.putImageData(lastState, 0, 0);
+                setPaintHistory(prev => prev.slice(0, -1));
+                // Save the restored state
+                const newSrc = canvas.toDataURL('image/png');
+                setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: newSrc } : p));
+            };
+
+            const clearAllPaint = () => {
+                if (!activePage || !canvasRef.current) return;
+                // Reset to original and clear history
+                setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: p.originalSrc } : p));
+                setPaintHistory([]);
+            };
+
             const handlePaintMouseMove = (e) => {
+                // Update brush cursor position when in paint mode
+                if (activeTool === 'paint' && !cropMode && viewerRef.current) {
+                    const rect = viewerRef.current.getBoundingClientRect();
+                    setBrushCursor({
+                        x: e.clientX - rect.left,
+                        y: e.clientY - rect.top,
+                        visible: true
+                    });
+                }
+                
                 if (!isPainting || !activePage) return;
                 const rect = canvasRef.current.getBoundingClientRect();
                 const scaleX = canvasRef.current.width / rect.width;
@@ -623,20 +689,37 @@
                 ctx.stroke();
             };
 
+            const handleViewerMouseEnter = () => {
+                if (activeTool === 'paint' && !cropMode) {
+                    setBrushCursor(prev => ({ ...prev, visible: true }));
+                }
+            };
+
+            const handleViewerMouseLeave = () => {
+                setBrushCursor(prev => ({ ...prev, visible: false }));
+            };
+
             const exportFile = (type) => {
                 if (!activePage || !canvasRef.current) return;
                 const canvas = canvasRef.current;
                 if (type === 'jpg') {
                     const link = document.createElement('a');
                     link.download = `doc-${activePage.name}.jpg`;
-                    link.href = canvas.toDataURL('image/jpeg', 0.9);
+                    // Use maximum quality for export
+                    link.href = canvas.toDataURL('image/jpeg', 1.0);
+                    link.click();
+                } else if (type === 'png') {
+                    const link = document.createElement('a');
+                    link.download = `doc-${activePage.name}.png`;
+                    link.href = canvas.toDataURL('image/png');
                     link.click();
                 } else {
                     const { jsPDF } = window.jspdf;
                     if (!jsPDF) return alert("PDF Engine not loaded");
                     const orient = canvas.width > canvas.height ? 'l' : 'p';
                     const doc = new jsPDF({ orientation: orient, unit: 'px', format: [canvas.width, canvas.height] });
-                    doc.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, canvas.width, canvas.height);
+                    // Use PNG for highest quality in PDF
+                    doc.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
                     doc.save(`doc-${activePage.name}.pdf`);
                 }
             };
@@ -670,6 +753,10 @@
                 );
             };
 
+            // Calculate displayed dimensions
+            const displayWidth = activePage ? activePage.width * (zoom / 100) : 0;
+            const displayHeight = activePage ? activePage.height * (zoom / 100) : 0;
+
             return (
                 <div className="flex flex-col h-screen w-full bg-background font-sans">
                     
@@ -687,7 +774,7 @@
                              <div className="flex items-center border rounded-md ml-2">
                                 <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none" onClick={() => setZoom(z => Math.max(10, z - 10))}><ZoomOut className="w-3 h-3" /></Button>
                                 <span className="w-12 text-center text-xs font-medium">{zoom}%</span>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none" onClick={() => setZoom(z => Math.min(200, z + 10))}><ZoomIn className="w-3 h-3" /></Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none" onClick={() => setZoom(z => Math.min(300, z + 10))}><ZoomIn className="w-3 h-3" /></Button>
                             </div>
                         </div>
                     </header>
@@ -701,7 +788,7 @@
                             </div>
                             <div className="flex-1 overflow-y-auto p-4 space-y-4">
                                 {pages.map((page, idx) => (
-                                    <div key={page.id} onClick={() => { setActivePageId(page.id); setCropMode(false); setCropPoints(null); }}
+                                    <div key={page.id} onClick={() => { setActivePageId(page.id); setCropMode(false); setCropPoints(null); setPaintHistory([]); }}
                                          className={cn("group relative aspect-[3/4] border-2 rounded-lg overflow-hidden cursor-pointer transition-all hover:border-primary/50", activePageId === page.id ? "border-primary ring-2 ring-primary/10" : "border-border bg-white")}>
                                         <img src={page.src} className="w-full h-full object-cover" />
                                         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -720,39 +807,74 @@
                             </div>
                         </div>
 
-                        <div ref={containerRef} className="flex-1 bg-muted/10 bg-dot-pattern flex items-center justify-center overflow-auto relative p-8">
-                            {activePage ? (
-                                <div ref={viewerRef}
-                                     className="relative shadow-xl transition-all duration-200 ease-out bg-white" 
-                                     style={{ width: `${activePage.width * (zoom / 100)}px`, height: `${activePage.height * (zoom / 100)}px` }}
-                                     onMouseDown={handlePaintMouseDown} 
-                                     onMouseMove={(e) => { handleViewerMouseMove(e); handlePaintMouseMove(e); }} 
-                                     onMouseUp={handleViewerMouseUp} 
-                                     onMouseLeave={handleViewerMouseUp}>
-                                    
-                                    <canvas ref={canvasRef} className={cn("w-full h-full block", cropMode ? "cursor-default" : activeTool === 'paint' ? "cursor-cell" : "cursor-default")} />
-                                    
-                                    {isProcessing && (
-                                        <div className="absolute inset-0 bg-white/50 backdrop-blur-[2px] flex items-center justify-center z-30">
-                                            <div className="bg-white px-6 py-3 rounded-full shadow-lg border flex items-center gap-3">
-                                                <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                                                <span className="text-sm font-medium">Processing...</span>
+                        {/* Fixed scrolling container */}
+                        <div ref={containerRef} className="flex-1 bg-muted/10 bg-dot-pattern overflow-hidden relative">
+                            <div ref={scrollContainerRef} className="scroll-container">
+                                <div 
+                                    className="scroll-content"
+                                    style={{
+                                        width: activePage ? Math.max('100%', displayWidth + 64) : '100%',
+                                        height: activePage ? Math.max('100%', displayHeight + 64) : '100%',
+                                        minWidth: activePage && displayWidth > (containerRef.current?.clientWidth || 0) - 64 ? displayWidth + 64 : '100%',
+                                        minHeight: activePage && displayHeight > (containerRef.current?.clientHeight || 0) - 64 ? displayHeight + 64 : '100%',
+                                    }}
+                                >
+                                    {activePage ? (
+                                        <div ref={viewerRef}
+                                             className="relative shadow-xl bg-white flex-shrink-0" 
+                                             style={{ width: displayWidth, height: displayHeight }}
+                                             onMouseDown={handlePaintMouseDown} 
+                                             onMouseMove={(e) => { handleViewerMouseMove(e); handlePaintMouseMove(e); }} 
+                                             onMouseUp={handleViewerMouseUp} 
+                                             onMouseLeave={(e) => { handleViewerMouseUp(); handleViewerMouseLeave(); }}
+                                             onMouseEnter={handleViewerMouseEnter}>
+                                            
+                                            <canvas ref={canvasRef} className={cn("w-full h-full block", cropMode ? "cursor-default" : activeTool === 'paint' ? "cursor-none" : "cursor-default")} />
+                                            
+                                            {/* Brush cursor overlay */}
+                                            {activeTool === 'paint' && !cropMode && brushCursor.visible && (
+                                                <div 
+                                                    className="pointer-events-none absolute rounded-full border-2 transition-[width,height] duration-75"
+                                                    style={{
+                                                        width: brushSize * (zoom / 100),
+                                                        height: brushSize * (zoom / 100),
+                                                        left: brushCursor.x,
+                                                        top: brushCursor.y,
+                                                        transform: 'translate(-50%, -50%)',
+                                                        borderColor: brushColor === '#ffffff' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.7)',
+                                                        backgroundColor: brushColor === '#ffffff' 
+                                                            ? 'rgba(255,255,255,0.3)' 
+                                                            : `${brushColor}33`,
+                                                        boxShadow: brushColor === '#ffffff' 
+                                                            ? '0 0 0 1px rgba(0,0,0,0.2)' 
+                                                            : '0 0 0 1px rgba(255,255,255,0.3)',
+                                                    }}
+                                                />
+                                            )}
+                                            
+                                            {isProcessing && (
+                                                <div className="absolute inset-0 bg-white/50 backdrop-blur-[2px] flex items-center justify-center z-30">
+                                                    <div className="bg-white px-6 py-3 rounded-full shadow-lg border flex items-center gap-3">
+                                                        <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                                        <span className="text-sm font-medium">Processing...</span>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {renderCropOverlay()}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center">
+                                            <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                                <ImageIcon className="w-8 h-8 text-muted-foreground" />
                                             </div>
+                                            <h3 className="text-lg font-semibold">No Document Selected</h3>
+                                            <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto">Upload a PDF or Image to start editing, enhancing, and exporting.</p>
+                                            <Button className="mt-4" onClick={() => fileInputRef.current.click()}>Upload File</Button>
                                         </div>
                                     )}
-
-                                    {renderCropOverlay()}
                                 </div>
-                            ) : (
-                                <div className="text-center">
-                                    <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
-                                        <ImageIcon className="w-8 h-8 text-muted-foreground" />
-                                    </div>
-                                    <h3 className="text-lg font-semibold">No Document Selected</h3>
-                                    <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto">Upload a PDF or Image to start editing, enhancing, and exporting.</p>
-                                    <Button className="mt-4" onClick={() => fileInputRef.current.click()}>Upload File</Button>
-                                </div>
-                            )}
+                            </div>
                         </div>
 
                         <div className={cn("bg-background border-l flex flex-col transition-all duration-300", rightPanelOpen ? "w-80" : "w-14")}>
@@ -836,6 +958,7 @@
                                                     <h3 className="font-medium text-sm mb-1">Correction Tool</h3>
                                                     <p className="text-xs text-muted-foreground">Use white to erase marks, black to fill text.</p>
                                                 </div>
+                                                
                                                 <div>
                                                     <label className="text-xs font-medium mb-2 block">Shade</label>
                                                     <div className="grid grid-cols-6 gap-1.5">
@@ -848,7 +971,32 @@
                                                 </div>
                                                 <div>
                                                     <label className="text-xs font-medium mb-2 block">Brush Size: {brushSize}px</label>
-                                                    <input type="range" min="1" max="30" value={brushSize} onChange={(e) => setBrushSize(parseInt(e.target.value))} className="w-full accent-primary" />
+                                                    <input type="range" min="1" max="50" value={brushSize} onChange={(e) => setBrushSize(parseInt(e.target.value))} className="w-full accent-primary" />
+                                                </div>
+                                                
+                                                <Separator />
+                                                
+                                                {/* Undo and Clear Buttons */}
+                                                <div className="space-y-2">
+                                                    <Button 
+                                                        variant="outline" 
+                                                        className="w-full" 
+                                                        onClick={undoLastStroke}
+                                                        disabled={paintHistory.length === 0}
+                                                    >
+                                                        <Undo2 className="w-4 h-4 mr-2" /> 
+                                                        Undo Stroke
+                                                        {paintHistory.length > 0 && (
+                                                            <span className="ml-auto text-xs text-muted-foreground">({paintHistory.length})</span>
+                                                        )}
+                                                    </Button>
+                                                    <Button 
+                                                        variant="ghost" 
+                                                        className="w-full text-destructive hover:text-destructive hover:bg-destructive/10" 
+                                                        onClick={clearAllPaint}
+                                                    >
+                                                        <Eraser className="w-4 h-4 mr-2" /> Clear All Paint
+                                                    </Button>
                                                 </div>
                                             </div>
                                         )}
@@ -859,16 +1007,21 @@
                                                     <h3 className="font-medium text-sm mb-1">Export Page</h3>
                                                     <p className="text-xs text-muted-foreground">Save current page to device.</p>
                                                 </div>
-                                                <div className="grid grid-cols-2 gap-3">
+                                                <div className="grid grid-cols-3 gap-3">
                                                     <button onClick={() => exportFile('pdf')} className="flex flex-col items-center justify-center p-4 rounded-lg border bg-card hover:bg-accent hover:text-accent-foreground transition-colors text-center gap-2">
                                                         <FileText className="w-6 h-6 text-red-500" />
                                                         <span className="text-xs font-medium">PDF</span>
+                                                    </button>
+                                                    <button onClick={() => exportFile('png')} className="flex flex-col items-center justify-center p-4 rounded-lg border bg-card hover:bg-accent hover:text-accent-foreground transition-colors text-center gap-2">
+                                                        <ImageIcon className="w-6 h-6 text-green-500" />
+                                                        <span className="text-xs font-medium">PNG</span>
                                                     </button>
                                                     <button onClick={() => exportFile('jpg')} className="flex flex-col items-center justify-center p-4 rounded-lg border bg-card hover:bg-accent hover:text-accent-foreground transition-colors text-center gap-2">
                                                         <ImageIcon className="w-6 h-6 text-blue-500" />
                                                         <span className="text-xs font-medium">JPG</span>
                                                     </button>
                                                 </div>
+                                                <p className="text-[10px] text-muted-foreground text-center">PNG for best quality, JPG for smaller size</p>
                                             </div>
                                         )}
                                     </div>
