@@ -111,6 +111,40 @@
             padding: 32px;
             box-sizing: border-box;
         }
+        /* Custom slider styling */
+        .intensity-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: linear-gradient(to right, hsl(240 4.8% 95.9%) 0%, hsl(240 5.9% 10%) 100%);
+            outline: none;
+        }
+        .intensity-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: white;
+            border: 2px solid hsl(240 5.9% 10%);
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: transform 0.1s ease;
+        }
+        .intensity-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+        }
+        .intensity-slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: white;
+            border: 2px solid hsl(240 5.9% 10%);
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
     </style>
 </head>
 <body class="bg-background text-foreground antialiased">
@@ -295,7 +329,8 @@
             }
         };
 
-        const applyDocumentEnhancement = (ctx, width, height, mode = 'auto') => {
+        // Returns fully enhanced ImageData (doesn't modify canvas directly)
+        const getEnhancedImageData = (ctx, width, height, mode = 'auto') => {
             const imageData = ctx.getImageData(0, 0, width, height);
             if (mode === 'auto' || mode === 'scan') {
                 removeShadows(imageData, width, height);
@@ -309,7 +344,24 @@
                 applySharpen(imageData, width, height, 1.0);
                 enhanceContrast(imageData, width, height);
             }
-            ctx.putImageData(imageData, 0, 0);
+            return imageData;
+        };
+
+        // Blend original and enhanced based on intensity (0-100)
+        const blendImageData = (originalData, enhancedData, intensity) => {
+            const result = new ImageData(
+                new Uint8ClampedArray(originalData.data.length),
+                originalData.width,
+                originalData.height
+            );
+            const t = intensity / 100;
+            for (let i = 0; i < originalData.data.length; i += 4) {
+                result.data[i] = originalData.data[i] * (1 - t) + enhancedData.data[i] * t;
+                result.data[i + 1] = originalData.data[i + 1] * (1 - t) + enhancedData.data[i + 1] * t;
+                result.data[i + 2] = originalData.data[i + 2] * (1 - t) + enhancedData.data[i + 2] * t;
+                result.data[i + 3] = 255;
+            }
+            return result;
         };
 
         // --- Perspective Transform ---
@@ -395,6 +447,7 @@
             const [rightPanelOpen, setRightPanelOpen] = useState(true);
             const [activeTool, setActiveTool] = useState("enhance");
             const [enhanceMode, setEnhanceMode] = useState("auto");
+            const [enhanceIntensity, setEnhanceIntensity] = useState(75);
             
             // Crop state - 4 corner points (relative to displayed canvas size)
             const [cropPoints, setCropPoints] = useState(null);
@@ -529,12 +582,36 @@
                 if (!activePage) return;
                 setIsProcessing(true);
                 setTimeout(() => {
-                    const canvas = canvasRef.current;
-                    applyDocumentEnhancement(canvas.getContext('2d'), canvas.width, canvas.height, enhanceMode);
-                    // Use PNG for lossless internal storage
-                    const newSrc = canvas.toDataURL('image/png');
-                    setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: newSrc } : p));
-                    setIsProcessing(false);
+                    // Create a temp canvas with original image
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = activePage.width;
+                    tempCanvas.height = activePage.height;
+                    const tempCtx = tempCanvas.getContext('2d');
+                    
+                    const img = new Image();
+                    img.onload = () => {
+                        tempCtx.drawImage(img, 0, 0);
+                        
+                        // Get original data
+                        const originalData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+                        
+                        // Get fully enhanced data
+                        const enhancedData = getEnhancedImageData(tempCtx, tempCanvas.width, tempCanvas.height, enhanceMode);
+                        
+                        // Blend based on intensity
+                        const blendedData = blendImageData(originalData, enhancedData, enhanceIntensity);
+                        
+                        // Apply to main canvas
+                        const canvas = canvasRef.current;
+                        const ctx = canvas.getContext('2d');
+                        ctx.putImageData(blendedData, 0, 0);
+                        
+                        // Save result
+                        const newSrc = canvas.toDataURL('image/png');
+                        setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: newSrc } : p));
+                        setIsProcessing(false);
+                    };
+                    img.src = activePage.src;
                 }, 50);
             };
 
@@ -925,7 +1002,29 @@
                                                         </button>
                                                     ))}
                                                 </div>
+                                                
                                                 <Button className="w-full" onClick={applyFilter}><Wand2 className="w-4 h-4 mr-2" /> Apply Enhancement</Button>
+                                                
+                                                {/* Intensity Slider */}
+                                                <div className="space-y-2 p-3 bg-muted/30 rounded-lg border">
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="text-xs font-medium">Intensity</label>
+                                                        <span className="text-xs font-semibold tabular-nums bg-background px-2 py-0.5 rounded border">{enhanceIntensity}%</span>
+                                                    </div>
+                                                    <input 
+                                                        type="range" 
+                                                        min="0" 
+                                                        max="100" 
+                                                        value={enhanceIntensity} 
+                                                        onChange={(e) => setEnhanceIntensity(parseInt(e.target.value))} 
+                                                        className="intensity-slider w-full"
+                                                    />
+                                                    <div className="flex justify-between text-[10px] text-muted-foreground">
+                                                        <span>Subtle</span>
+                                                        <span>Full</span>
+                                                    </div>
+                                                </div>
+                                                
                                                 <Button variant="outline" className="w-full" onClick={resetImage}><RefreshCw className="w-4 h-4 mr-2" /> Reset to Original</Button>
                                                 <Separator />
                                                 <Button variant="secondary" className="w-full" onClick={rotateActivePage}><RotateCw className="w-4 h-4 mr-2" /> Rotate 90°</Button>
