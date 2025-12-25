@@ -89,14 +89,17 @@
             box-shadow: 0 2px 6px rgba(0,0,0,0.15);
             transition: transform 0.1s ease, background 0.1s ease;
         }
-        .crop-handle:hover {
+        .crop-handle:hover, .crop-handle:focus {
             transform: translate(-50%, -50%) scale(1.2);
             background: hsl(240 5.9% 10%);
+            outline: none;
+        }
+        .crop-handle:focus {
+            box-shadow: 0 0 0 3px rgba(0,0,0,0.2);
         }
         .crop-handle:active {
             transform: translate(-50%, -50%) scale(1.3);
         }
-        /* Fix for proper scrolling when zoomed */
         .scroll-container {
             overflow: auto;
             width: 100%;
@@ -111,7 +114,6 @@
             padding: 32px;
             box-sizing: border-box;
         }
-        /* Custom slider styling */
         .intensity-slider {
             -webkit-appearance: none;
             appearance: none;
@@ -145,61 +147,56 @@
             cursor: pointer;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
+        /* Toast notification styles */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: hsl(240 5.9% 10%);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 9999;
+            opacity: 0;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+        .toast.error {
+            background: hsl(0 84.2% 60.2%);
+        }
+        /* Skip link for accessibility */
+        .skip-link {
+            position: absolute;
+            top: -40px;
+            left: 0;
+            background: hsl(240 5.9% 10%);
+            color: white;
+            padding: 8px 16px;
+            z-index: 100;
+            transition: top 0.3s;
+        }
+        .skip-link:focus {
+            top: 0;
+        }
     </style>
 </head>
 <body class="bg-background text-foreground antialiased">
+    <!-- Skip link for accessibility -->
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    
     <div id="root"></div>
+    <div id="toast" class="toast" role="alert" aria-live="polite"></div>
 
-    <script type="text/babel" data-type="module">
-        import React, { useState, useRef, useEffect } from 'https://esm.sh/react@18.2.0';
-        import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
-        import { clsx } from 'https://esm.sh/clsx';
-        import { twMerge } from 'https://esm.sh/tailwind-merge';
-        import { 
-          ZoomIn, ZoomOut, 
-          Image as ImageIcon, Wand2, ScanLine, Download, Trash2, 
-          ChevronRight, ChevronLeft, 
-          FileText, Crop, RotateCw, Check,
-          Paintbrush, Plus, RefreshCw, Sparkles, Undo2, Eraser
-        } from 'https://esm.sh/lucide-react@0.294.0?deps=react@18.2.0';
-
-        const cn = (...inputs) => twMerge(clsx(inputs));
-
-        const Button = ({ children, variant = "default", size = "default", className, ...props }) => {
-            const variants = {
-                default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow",
-                destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm",
-                outline: "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground",
-                secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-                ghost: "hover:bg-accent hover:text-accent-foreground",
-                link: "text-primary underline-offset-4 hover:underline",
-            };
-            const sizes = {
-                default: "h-9 px-4 py-2",
-                sm: "h-8 rounded-md px-3 text-xs",
-                lg: "h-10 rounded-md px-8",
-                icon: "h-9 w-9",
-            };
-            return (
-                <button 
-                    className={cn(
-                        "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
-                        variants[variant], sizes[size], className
-                    )}
-                    {...props}
-                >
-                    {children}
-                </button>
-            );
-        };
-
-        const Separator = ({ className, orientation = "horizontal" }) => (
-            <div className={cn("bg-border", orientation === "horizontal" ? "h-[1px] w-full" : "h-full w-[1px]", className)} />
-        );
-
-        // --- Advanced Document Enhancement ---
-        const removeShadows = (imageData, width, height) => {
-            const data = imageData.data;
+    <!-- Web Worker for image processing -->
+    <script id="image-worker" type="text/worker">
+        // Image processing functions running in Web Worker
+        const removeShadows = (data, width, height) => {
             const blockSize = Math.max(32, Math.floor(Math.min(width, height) / 8));
             const background = new Float32Array(width * height);
             
@@ -231,8 +228,7 @@
             }
         };
 
-        const applyGaussianBlur = (imageData, width, height) => {
-            const data = imageData.data;
+        const applyGaussianBlur = (data, width, height) => {
             const output = new Uint8ClampedArray(data.length);
             const kernel = [1, 2, 1, 2, 4, 2, 1, 2, 1];
             const kernelSum = 16;
@@ -261,10 +257,9 @@
             for (let i = 0; i < data.length; i++) data[i] = output[i];
         };
 
-        const applySharpen = (imageData, width, height, amount = 0.5) => {
-            const data = imageData.data;
+        const applySharpen = (data, width, height, amount = 0.5) => {
             const original = new Uint8ClampedArray(data);
-            applyGaussianBlur(imageData, width, height);
+            applyGaussianBlur(data, width, height);
             for (let i = 0; i < data.length; i += 4) {
                 for (let c = 0; c < 3; c++) {
                     const diff = original[i + c] - data[i + c];
@@ -273,8 +268,7 @@
             }
         };
 
-        const enhanceContrast = (imageData, width, height) => {
-            const data = imageData.data;
+        const enhanceContrast = (data, width, height) => {
             let minR = 255, maxR = 0, minG = 255, maxG = 0, minB = 255, maxB = 0;
             for (let i = 0; i < data.length; i += 4) {
                 minR = Math.min(minR, data[i]); maxR = Math.max(maxR, data[i]);
@@ -289,8 +283,7 @@
             }
         };
 
-        const applyAdaptiveThreshold = (imageData, width, height, sensitivity = 0.15) => {
-            const data = imageData.data;
+        const applyAdaptiveThreshold = (data, width, height, sensitivity = 0.15) => {
             const gray = new Float32Array(width * height);
             for (let i = 0; i < width * height; i++) {
                 const idx = i * 4;
@@ -329,42 +322,36 @@
             }
         };
 
-        // Returns fully enhanced ImageData (doesn't modify canvas directly)
-        const getEnhancedImageData = (ctx, width, height, mode = 'auto') => {
-            const imageData = ctx.getImageData(0, 0, width, height);
+        const processEnhancement = (imageData, width, height, mode, intensity) => {
+            const data = imageData;
+            const originalData = new Uint8ClampedArray(data);
+            
+            // Apply full enhancement
             if (mode === 'auto' || mode === 'scan') {
-                removeShadows(imageData, width, height);
-                enhanceContrast(imageData, width, height);
-                applySharpen(imageData, width, height, 0.6);
-                applyAdaptiveThreshold(imageData, width, height, mode === 'scan' ? 0.12 : 0.18);
+                removeShadows(data, width, height);
+                enhanceContrast(data, width, height);
+                applySharpen(data, width, height, 0.6);
+                applyAdaptiveThreshold(data, width, height, mode === 'scan' ? 0.12 : 0.18);
             } else if (mode === 'lighten') {
-                removeShadows(imageData, width, height);
-                enhanceContrast(imageData, width, height);
+                removeShadows(data, width, height);
+                enhanceContrast(data, width, height);
             } else if (mode === 'sharpen') {
-                applySharpen(imageData, width, height, 1.0);
-                enhanceContrast(imageData, width, height);
+                applySharpen(data, width, height, 1.0);
+                enhanceContrast(data, width, height);
             }
-            return imageData;
-        };
-
-        // Blend original and enhanced based on intensity (0-100)
-        const blendImageData = (originalData, enhancedData, intensity) => {
-            const result = new ImageData(
-                new Uint8ClampedArray(originalData.data.length),
-                originalData.width,
-                originalData.height
-            );
+            
+            // Blend based on intensity
             const t = intensity / 100;
-            for (let i = 0; i < originalData.data.length; i += 4) {
-                result.data[i] = originalData.data[i] * (1 - t) + enhancedData.data[i] * t;
-                result.data[i + 1] = originalData.data[i + 1] * (1 - t) + enhancedData.data[i + 1] * t;
-                result.data[i + 2] = originalData.data[i + 2] * (1 - t) + enhancedData.data[i + 2] * t;
-                result.data[i + 3] = 255;
+            for (let i = 0; i < data.length; i += 4) {
+                data[i] = originalData[i] * (1 - t) + data[i] * t;
+                data[i + 1] = originalData[i + 1] * (1 - t) + data[i + 1] * t;
+                data[i + 2] = originalData[i + 2] * (1 - t) + data[i + 2] * t;
             }
-            return result;
+            
+            return data;
         };
 
-        // --- Perspective Transform ---
+        // Perspective transform
         const solveLinearSystem = (A, b) => {
             const n = b.length;
             const augmented = A.map((row, i) => [...row, b[i]]);
@@ -374,6 +361,7 @@
                     if (Math.abs(augmented[row][col]) > Math.abs(augmented[maxRow][col])) maxRow = row;
                 }
                 [augmented[col], augmented[maxRow]] = [augmented[maxRow], augmented[col]];
+                if (Math.abs(augmented[col][col]) < 1e-10) return null; // Singular matrix
                 for (let row = col + 1; row < n; row++) {
                     const factor = augmented[row][col] / augmented[col][col];
                     for (let j = col; j <= n; j++) augmented[row][j] -= factor * augmented[col][j];
@@ -401,60 +389,312 @@
             return solveLinearSystem(A, b);
         };
 
-        const applyPerspectiveTransform = (sourceCanvas, srcPoints, width, height) => {
-            const destCanvas = document.createElement('canvas');
-            destCanvas.width = width; destCanvas.height = height;
-            const destCtx = destCanvas.getContext('2d');
-            const dstPoints = [{ x: 0, y: 0 }, { x: width, y: 0 }, { x: width, y: height }, { x: 0, y: height }];
+        const applyPerspectiveTransform = (sourceData, sourceWidth, sourceHeight, srcPoints, outputWidth, outputHeight) => {
+            const dstPoints = [{ x: 0, y: 0 }, { x: outputWidth, y: 0 }, { x: outputWidth, y: outputHeight }, { x: 0, y: outputHeight }];
             const H = computePerspectiveTransform(dstPoints, srcPoints);
-            const sourceCtx = sourceCanvas.getContext('2d');
-            const sourceData = sourceCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
-            const destData = destCtx.createImageData(width, height);
             
-            for (let y = 0; y < height; y++) {
-                for (let x = 0; x < width; x++) {
+            if (!H) return null; // Transform failed
+            
+            const destData = new Uint8ClampedArray(outputWidth * outputHeight * 4);
+            
+            for (let y = 0; y < outputHeight; y++) {
+                for (let x = 0; x < outputWidth; x++) {
                     const denom = H[6] * x + H[7] * y + 1;
+                    if (Math.abs(denom) < 1e-10) continue; // Skip degenerate points
+                    
                     const srcX = (H[0] * x + H[1] * y + H[2]) / denom;
                     const srcY = (H[3] * x + H[4] * y + H[5]) / denom;
                     const x0 = Math.floor(srcX), y0 = Math.floor(srcY);
                     const x1 = x0 + 1, y1 = y0 + 1;
                     
-                    if (x0 >= 0 && x1 < sourceCanvas.width && y0 >= 0 && y1 < sourceCanvas.height) {
+                    if (x0 >= 0 && x1 < sourceWidth && y0 >= 0 && y1 < sourceHeight) {
                         const fx = srcX - x0, fy = srcY - y0;
                         for (let c = 0; c < 4; c++) {
-                            const v00 = sourceData.data[(y0 * sourceCanvas.width + x0) * 4 + c];
-                            const v10 = sourceData.data[(y0 * sourceCanvas.width + x1) * 4 + c];
-                            const v01 = sourceData.data[(y1 * sourceCanvas.width + x0) * 4 + c];
-                            const v11 = sourceData.data[(y1 * sourceCanvas.width + x1) * 4 + c];
-                            destData.data[(y * width + x) * 4 + c] = v00 * (1 - fx) * (1 - fy) + v10 * fx * (1 - fy) + v01 * (1 - fx) * fy + v11 * fx * fy;
+                            const v00 = sourceData[(y0 * sourceWidth + x0) * 4 + c];
+                            const v10 = sourceData[(y0 * sourceWidth + x1) * 4 + c];
+                            const v01 = sourceData[(y1 * sourceWidth + x0) * 4 + c];
+                            const v11 = sourceData[(y1 * sourceWidth + x1) * 4 + c];
+                            destData[(y * outputWidth + x) * 4 + c] = v00 * (1 - fx) * (1 - fy) + v10 * fx * (1 - fy) + v01 * (1 - fx) * fy + v11 * fx * fy;
                         }
                     } else {
-                        const idx = (y * width + x) * 4;
-                        destData.data[idx] = 255; destData.data[idx + 1] = 255; destData.data[idx + 2] = 255; destData.data[idx + 3] = 255;
+                        const idx = (y * outputWidth + x) * 4;
+                        destData[idx] = 255; destData[idx + 1] = 255; destData[idx + 2] = 255; destData[idx + 3] = 255;
                     }
                 }
             }
-            destCtx.putImageData(destData, 0, 0);
-            return destCanvas;
+            
+            return destData;
         };
 
-        // --- Main App ---
+        self.onmessage = function(e) {
+            const { type, id, data } = e.data;
+            
+            try {
+                if (type === 'enhance') {
+                    const result = processEnhancement(
+                        data.imageData,
+                        data.width,
+                        data.height,
+                        data.mode,
+                        data.intensity
+                    );
+                    self.postMessage({ id, success: true, result, width: data.width, height: data.height });
+                } else if (type === 'transform') {
+                    const result = applyPerspectiveTransform(
+                        data.sourceData,
+                        data.sourceWidth,
+                        data.sourceHeight,
+                        data.srcPoints,
+                        data.outputWidth,
+                        data.outputHeight
+                    );
+                    if (result) {
+                        self.postMessage({ id, success: true, result, width: data.outputWidth, height: data.outputHeight });
+                    } else {
+                        self.postMessage({ id, success: false, error: 'Transform computation failed - invalid polygon' });
+                    }
+                }
+            } catch (err) {
+                self.postMessage({ id, success: false, error: err.message });
+            }
+        };
+    </script>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useRef, useEffect, useCallback, useMemo } from 'https://esm.sh/react@18.2.0';
+        import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+        import { clsx } from 'https://esm.sh/clsx';
+        import { twMerge } from 'https://esm.sh/tailwind-merge';
+        import { 
+          ZoomIn, ZoomOut, 
+          Image as ImageIcon, Wand2, ScanLine, Download, Trash2, 
+          ChevronRight, ChevronLeft, 
+          FileText, Crop, RotateCw, Check,
+          Paintbrush, Plus, RefreshCw, Sparkles, Undo2, Eraser,
+          AlertCircle, Loader2
+        } from 'https://esm.sh/lucide-react@0.294.0?deps=react@18.2.0';
+
+        const cn = (...inputs) => twMerge(clsx(inputs));
+
+        // ============ CONSTANTS ============
+        const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+        const MAX_PDF_PAGES = 100;
+        const MAX_UNDO_STATES = 10;
+        const DB_NAME = 'SimpleScanner';
+        const DB_VERSION = 1;
+        const STORE_NAME = 'pages';
+
+        // ============ TOAST UTILITY ============
+        const showToast = (message, isError = false) => {
+            const toast = document.getElementById('toast');
+            if (!toast) return;
+            toast.textContent = message;
+            toast.className = `toast show${isError ? ' error' : ''}`;
+            setTimeout(() => { toast.className = 'toast'; }, 3000);
+        };
+
+        // ============ INDEXEDDB STORAGE ============
+        class PageStorage {
+            constructor() {
+                this.db = null;
+                this.ready = this.init();
+            }
+
+            async init() {
+                return new Promise((resolve, reject) => {
+                    const request = indexedDB.open(DB_NAME, DB_VERSION);
+                    
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => {
+                        this.db = request.result;
+                        resolve();
+                    };
+                    
+                    request.onupgradeneeded = (e) => {
+                        const db = e.target.result;
+                        if (!db.objectStoreNames.contains(STORE_NAME)) {
+                            db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                        }
+                    };
+                });
+            }
+
+            async savePage(page) {
+                await this.ready;
+                return new Promise((resolve, reject) => {
+                    const tx = this.db.transaction(STORE_NAME, 'readwrite');
+                    const store = tx.objectStore(STORE_NAME);
+                    const request = store.put(page);
+                    request.onsuccess = () => resolve();
+                    request.onerror = () => reject(request.error);
+                });
+            }
+
+            async deletePage(id) {
+                await this.ready;
+                return new Promise((resolve, reject) => {
+                    const tx = this.db.transaction(STORE_NAME, 'readwrite');
+                    const store = tx.objectStore(STORE_NAME);
+                    const request = store.delete(id);
+                    request.onsuccess = () => resolve();
+                    request.onerror = () => reject(request.error);
+                });
+            }
+
+            async getAllPages() {
+                await this.ready;
+                return new Promise((resolve, reject) => {
+                    const tx = this.db.transaction(STORE_NAME, 'readonly');
+                    const store = tx.objectStore(STORE_NAME);
+                    const request = store.getAll();
+                    request.onsuccess = () => resolve(request.result || []);
+                    request.onerror = () => reject(request.error);
+                });
+            }
+
+            async clearAll() {
+                await this.ready;
+                return new Promise((resolve, reject) => {
+                    const tx = this.db.transaction(STORE_NAME, 'readwrite');
+                    const store = tx.objectStore(STORE_NAME);
+                    const request = store.clear();
+                    request.onsuccess = () => resolve();
+                    request.onerror = () => reject(request.error);
+                });
+            }
+        }
+
+        const storage = new PageStorage();
+
+        // ============ WEB WORKER MANAGER ============
+        class WorkerManager {
+            constructor() {
+                this.worker = null;
+                this.pendingJobs = new Map();
+                this.jobId = 0;
+                this.init();
+            }
+
+            init() {
+                const workerCode = document.getElementById('image-worker').textContent;
+                const blob = new Blob([workerCode], { type: 'application/javascript' });
+                const url = URL.createObjectURL(blob);
+                this.worker = new Worker(url);
+                
+                this.worker.onmessage = (e) => {
+                    const { id, success, result, error, width, height } = e.data;
+                    const job = this.pendingJobs.get(id);
+                    if (job) {
+                        this.pendingJobs.delete(id);
+                        if (success) {
+                            job.resolve({ data: result, width, height });
+                        } else {
+                            job.reject(new Error(error));
+                        }
+                    }
+                };
+
+                this.worker.onerror = (e) => {
+                    console.error('Worker error:', e);
+                };
+            }
+
+            async process(type, data) {
+                return new Promise((resolve, reject) => {
+                    const id = ++this.jobId;
+                    this.pendingJobs.set(id, { resolve, reject });
+                    this.worker.postMessage({ type, id, data });
+                });
+            }
+
+            terminate() {
+                if (this.worker) {
+                    this.worker.terminate();
+                    this.worker = null;
+                }
+            }
+        }
+
+        // ============ POLYGON VALIDATION ============
+        const isValidPolygon = (points) => {
+            if (!points || points.length !== 4) return false;
+            
+            // Check for self-intersection using line segment intersection
+            const intersects = (p1, p2, p3, p4) => {
+                const ccw = (A, B, C) => (C.y - A.y) * (B.x - A.x) > (B.y - A.y) * (C.x - A.x);
+                return ccw(p1, p3, p4) !== ccw(p2, p3, p4) && ccw(p1, p2, p3) !== ccw(p1, p2, p4);
+            };
+            
+            // Check opposite edges don't intersect
+            if (intersects(points[0], points[1], points[2], points[3])) return false;
+            if (intersects(points[1], points[2], points[3], points[0])) return false;
+            
+            // Check minimum area (at least 100 square pixels)
+            const area = Math.abs(
+                (points[0].x * (points[1].y - points[3].y) +
+                 points[1].x * (points[2].y - points[0].y) +
+                 points[2].x * (points[3].y - points[1].y) +
+                 points[3].x * (points[0].y - points[2].y)) / 2
+            );
+            
+            return area >= 100;
+        };
+
+        // ============ UI COMPONENTS ============
+        const Button = ({ children, variant = "default", size = "default", className, ...props }) => {
+            const variants = {
+                default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow",
+                destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm",
+                outline: "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground",
+                secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+                ghost: "hover:bg-accent hover:text-accent-foreground",
+                link: "text-primary underline-offset-4 hover:underline",
+            };
+            const sizes = {
+                default: "h-9 px-4 py-2",
+                sm: "h-8 rounded-md px-3 text-xs",
+                lg: "h-10 rounded-md px-8",
+                icon: "h-9 w-9",
+            };
+            return (
+                <button 
+                    className={cn(
+                        "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+                        variants[variant], sizes[size], className
+                    )}
+                    {...props}
+                >
+                    {children}
+                </button>
+            );
+        };
+
+        const Separator = ({ className, orientation = "horizontal" }) => (
+            <div className={cn("bg-border", orientation === "horizontal" ? "h-[1px] w-full" : "h-full w-[1px]", className)} role="separator" />
+        );
+
+        // ============ MAIN APP ============
         function DocuScanPro() {
             const [pages, setPages] = useState([]);
             const [activePageId, setActivePageId] = useState(null);
             const [zoom, setZoom] = useState(60);
             const [isProcessing, setIsProcessing] = useState(false);
+            const [processingMessage, setProcessingMessage] = useState('Processing...');
             const [rightPanelOpen, setRightPanelOpen] = useState(true);
             const [activeTool, setActiveTool] = useState("enhance");
             const [enhanceMode, setEnhanceMode] = useState("auto");
             const [enhanceIntensity, setEnhanceIntensity] = useState(75);
+            const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+            const [pdfReady, setPdfReady] = useState(false);
+            const [pendingFiles, setPendingFiles] = useState([]);
             
-            // Crop state - 4 corner points (relative to displayed canvas size)
+            // Crop state
             const [cropPoints, setCropPoints] = useState(null);
             const [isDraggingPoint, setIsDraggingPoint] = useState(null);
             const [cropMode, setCropMode] = useState(false);
+            const [focusedCropHandle, setFocusedCropHandle] = useState(null);
 
-            // Paint state - white/black only
+            // Paint state
             const [brushColor, setBrushColor] = useState("#000000");
             const [brushSize, setBrushSize] = useState(10);
             const [isPainting, setIsPainting] = useState(false);
@@ -466,27 +706,169 @@
             const viewerRef = useRef(null);
             const fileInputRef = useRef(null);
             const scrollContainerRef = useRef(null);
+            const workerRef = useRef(null);
 
             const paintColors = [
                 '#000000', '#1a1a1a', '#333333', '#4d4d4d', '#666666', '#808080',
                 '#999999', '#b3b3b3', '#cccccc', '#e6e6e6', '#f2f2f2', '#ffffff',
             ];
 
+            const activePage = useMemo(() => pages.find(p => p.id === activePageId), [pages, activePageId]);
+
+            // Initialize Web Worker
             useEffect(() => {
-                if (!window.pdfjsLib) {
-                    const script = document.createElement('script');
-                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-                    script.async = true;
-                    script.onload = () => {
-                        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-                    };
-                    document.body.appendChild(script);
-                }
+                workerRef.current = new WorkerManager();
+                return () => {
+                    if (workerRef.current) {
+                        workerRef.current.terminate();
+                    }
+                };
             }, []);
 
-            const activePage = pages.find(p => p.id === activePageId);
+            // Load PDF.js
+            useEffect(() => {
+                if (window.pdfjsLib) {
+                    setPdfReady(true);
+                    return;
+                }
+                
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+                script.async = true;
+                script.onload = () => {
+                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                    setPdfReady(true);
+                };
+                script.onerror = () => {
+                    showToast('Failed to load PDF engine', true);
+                };
+                document.body.appendChild(script);
+            }, []);
 
-            // Auto-fit zoom only when page changes
+            // Process pending PDF files when engine is ready
+            useEffect(() => {
+                if (pdfReady && pendingFiles.length > 0) {
+                    const files = [...pendingFiles];
+                    setPendingFiles([]);
+                    processFiles(files);
+                }
+            }, [pdfReady, pendingFiles]);
+
+            // Load pages from IndexedDB on mount
+            useEffect(() => {
+                const loadPages = async () => {
+                    try {
+                        const savedPages = await storage.getAllPages();
+                        if (savedPages.length > 0) {
+                            // Sort by order if available
+                            savedPages.sort((a, b) => (a.order || 0) - (b.order || 0));
+                            setPages(savedPages);
+                            setActivePageId(savedPages[0].id);
+                            showToast(`Restored ${savedPages.length} page(s)`);
+                        }
+                    } catch (err) {
+                        console.error('Failed to load pages:', err);
+                    }
+                };
+                loadPages();
+            }, []);
+
+            // Save pages to IndexedDB when they change
+            useEffect(() => {
+                const savePages = async () => {
+                    if (pages.length === 0) return;
+                    try {
+                        for (let i = 0; i < pages.length; i++) {
+                            await storage.savePage({ ...pages[i], order: i });
+                        }
+                        setHasUnsavedChanges(false);
+                    } catch (err) {
+                        console.error('Failed to save pages:', err);
+                    }
+                };
+                
+                // Debounce saves
+                const timeoutId = setTimeout(savePages, 1000);
+                return () => clearTimeout(timeoutId);
+            }, [pages]);
+
+            // Beforeunload warning
+            useEffect(() => {
+                const handleBeforeUnload = (e) => {
+                    if (pages.length > 0) {
+                        e.preventDefault();
+                        e.returnValue = '';
+                        return '';
+                    }
+                };
+                window.addEventListener('beforeunload', handleBeforeUnload);
+                return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+            }, [pages.length]);
+
+            // Keyboard shortcuts
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    // Ctrl+Z for undo
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && activeTool === 'paint') {
+                        e.preventDefault();
+                        undoLastStroke();
+                    }
+                    
+                    // Arrow keys for page navigation
+                    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                        const idx = pages.findIndex(p => p.id === activePageId);
+                        if (idx > 0) {
+                            setActivePageId(pages[idx - 1].id);
+                            setCropMode(false);
+                            setCropPoints(null);
+                        }
+                    }
+                    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                        const idx = pages.findIndex(p => p.id === activePageId);
+                        if (idx < pages.length - 1) {
+                            setActivePageId(pages[idx + 1].id);
+                            setCropMode(false);
+                            setCropPoints(null);
+                        }
+                    }
+                    
+                    // Escape to cancel crop
+                    if (e.key === 'Escape' && cropMode) {
+                        setCropMode(false);
+                        setCropPoints(null);
+                    }
+                    
+                    // Arrow keys for crop handle movement when focused
+                    if (cropMode && focusedCropHandle !== null && cropPoints) {
+                        const step = e.shiftKey ? 10 : 1;
+                        let dx = 0, dy = 0;
+                        if (e.key === 'ArrowLeft') dx = -step;
+                        if (e.key === 'ArrowRight') dx = step;
+                        if (e.key === 'ArrowUp') dy = -step;
+                        if (e.key === 'ArrowDown') dy = step;
+                        
+                        if (dx !== 0 || dy !== 0) {
+                            e.preventDefault();
+                            setCropPoints(prev => {
+                                const newPoints = [...prev];
+                                const rect = viewerRef.current?.getBoundingClientRect();
+                                if (rect) {
+                                    newPoints[focusedCropHandle] = {
+                                        x: Math.max(0, Math.min(rect.width, prev[focusedCropHandle].x + dx)),
+                                        y: Math.max(0, Math.min(rect.height, prev[focusedCropHandle].y + dy))
+                                    };
+                                }
+                                return newPoints;
+                            });
+                        }
+                    }
+                };
+                
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [activePageId, pages, activeTool, cropMode, cropPoints, focusedCropHandle]);
+
+            // Auto-fit zoom when page changes
             useEffect(() => {
                 if (activePage && containerRef.current) {
                     const container = containerRef.current;
@@ -501,7 +883,7 @@
                 }
             }, [activePage?.id]);
 
-            // Initialize crop points when entering crop mode (centered, within bounds)
+            // Initialize crop points when entering crop mode
             useEffect(() => {
                 if (cropMode && activePage && viewerRef.current && !cropPoints) {
                     const rect = viewerRef.current.getBoundingClientRect();
@@ -515,104 +897,242 @@
                 }
             }, [cropMode, activePage]);
 
-            const handleFileUpload = async (e) => {
-                const files = Array.from(e.target.files);
-                if (files.length === 0) return;
+            // Process files with validation
+            const processFiles = async (files) => {
                 setIsProcessing(true);
+                setProcessingMessage('Processing files...');
+                
+                let processedCount = 0;
+                let errorCount = 0;
+                
                 for (const file of files) {
+                    // File size validation
+                    if (file.size > MAX_FILE_SIZE) {
+                        showToast(`${file.name} exceeds 50MB limit`, true);
+                        errorCount++;
+                        continue;
+                    }
+                    
                     if (file.type === 'application/pdf') {
-                        if (!window.pdfjsLib) { alert("Loading PDF engine..."); setIsProcessing(false); return; }
+                        if (!window.pdfjsLib) {
+                            setPendingFiles(prev => [...prev, file]);
+                            continue;
+                        }
+                        
                         try {
+                            setProcessingMessage(`Loading ${file.name}...`);
                             const arrayBuffer = await file.arrayBuffer();
                             const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-                            for (let i = 1; i <= pdf.numPages; i++) {
+                            
+                            // Page count validation
+                            const pageCount = Math.min(pdf.numPages, MAX_PDF_PAGES);
+                            if (pdf.numPages > MAX_PDF_PAGES) {
+                                showToast(`PDF limited to first ${MAX_PDF_PAGES} pages`, false);
+                            }
+                            
+                            for (let i = 1; i <= pageCount; i++) {
+                                setProcessingMessage(`Processing page ${i}/${pageCount}...`);
                                 const page = await pdf.getPage(i);
                                 const viewport = page.getViewport({ scale: 2.0 });
                                 const offscreenCanvas = document.createElement('canvas');
-                                offscreenCanvas.width = viewport.width; offscreenCanvas.height = viewport.height;
+                                offscreenCanvas.width = viewport.width;
+                                offscreenCanvas.height = viewport.height;
                                 await page.render({ canvasContext: offscreenCanvas.getContext('2d'), viewport }).promise;
-                                // Use PNG for lossless internal storage
+                                
                                 const imgData = offscreenCanvas.toDataURL('image/png');
-                                const newPage = { id: Date.now() + Math.random(), src: imgData, originalSrc: imgData, name: `${file.name}-${i}`, width: viewport.width, height: viewport.height };
-                                setPages(prev => [...prev, newPage]);
-                                if (i === 1 && !activePageId) setActivePageId(newPage.id);
-                            }
-                        } catch (err) { alert("PDF Error: " + err.message); }
-                    } else if (file.type.startsWith('image/')) {
-                        await new Promise((resolve) => {
-                            const reader = new FileReader();
-                            reader.onload = (ev) => {
-                                const img = new Image();
-                                img.onload = () => {
-                                    // Convert to PNG for lossless internal storage
-                                    const tempCanvas = document.createElement('canvas');
-                                    tempCanvas.width = img.width;
-                                    tempCanvas.height = img.height;
-                                    const ctx = tempCanvas.getContext('2d');
-                                    ctx.drawImage(img, 0, 0);
-                                    const pngData = tempCanvas.toDataURL('image/png');
-                                    const newPage = { id: Date.now() + Math.random(), src: pngData, originalSrc: pngData, name: file.name, width: img.width, height: img.height };
-                                    setPages(prev => [...prev, newPage]);
-                                    if (!activePageId) setActivePageId(newPage.id);
-                                    resolve();
+                                const newPage = {
+                                    id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                                    src: imgData,
+                                    originalSrc: imgData,
+                                    name: `${file.name}-${i}`,
+                                    width: viewport.width,
+                                    height: viewport.height,
+                                    createdAt: Date.now()
                                 };
-                                img.src = ev.target.result;
-                            };
-                            reader.readAsDataURL(file);
-                        });
+                                
+                                setPages(prev => [...prev, newPage]);
+                                if (!activePageId && i === 1) setActivePageId(newPage.id);
+                                processedCount++;
+                            }
+                        } catch (err) {
+                            console.error('PDF Error:', err);
+                            showToast(`Failed to load ${file.name}: ${err.message}`, true);
+                            errorCount++;
+                        }
+                    } else if (file.type.startsWith('image/')) {
+                        try {
+                            setProcessingMessage(`Loading ${file.name}...`);
+                            await new Promise((resolve, reject) => {
+                                const reader = new FileReader();
+                                reader.onload = (ev) => {
+                                    const img = new Image();
+                                    img.onload = () => {
+                                        // Validate image dimensions
+                                        if (img.width * img.height > 100000000) { // 100 megapixels
+                                            reject(new Error('Image too large (max 100 megapixels)'));
+                                            return;
+                                        }
+                                        
+                                        const tempCanvas = document.createElement('canvas');
+                                        tempCanvas.width = img.width;
+                                        tempCanvas.height = img.height;
+                                        const ctx = tempCanvas.getContext('2d');
+                                        ctx.drawImage(img, 0, 0);
+                                        const pngData = tempCanvas.toDataURL('image/png');
+                                        
+                                        const newPage = {
+                                            id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                                            src: pngData,
+                                            originalSrc: pngData,
+                                            name: file.name,
+                                            width: img.width,
+                                            height: img.height,
+                                            createdAt: Date.now()
+                                        };
+                                        
+                                        setPages(prev => [...prev, newPage]);
+                                        if (!activePageId) setActivePageId(newPage.id);
+                                        processedCount++;
+                                        resolve();
+                                    };
+                                    img.onerror = () => reject(new Error('Failed to load image'));
+                                    img.src = ev.target.result;
+                                };
+                                reader.onerror = () => reject(new Error('Failed to read file'));
+                                reader.readAsDataURL(file);
+                            });
+                        } catch (err) {
+                            console.error('Image Error:', err);
+                            showToast(`Failed to load ${file.name}: ${err.message}`, true);
+                            errorCount++;
+                        }
                     }
                 }
+                
                 setIsProcessing(false);
+                setProcessingMessage('Processing...');
+                
+                if (processedCount > 0) {
+                    showToast(`Added ${processedCount} page(s)`);
+                    setHasUnsavedChanges(true);
+                }
+            };
+
+            const handleFileUpload = async (e) => {
+                const files = Array.from(e.target.files);
+                if (files.length === 0) return;
+                await processFiles(files);
                 if (fileInputRef.current) fileInputRef.current.value = '';
             };
 
+            // Draw active page to canvas
             useEffect(() => {
                 if (!activePage || !canvasRef.current) return;
                 const canvas = canvasRef.current;
                 const ctx = canvas.getContext('2d');
                 const img = new Image();
                 img.onload = () => {
-                    canvas.width = activePage.width; canvas.height = activePage.height;
+                    canvas.width = activePage.width;
+                    canvas.height = activePage.height;
                     ctx.drawImage(img, 0, 0);
+                };
+                img.onerror = () => {
+                    showToast('Failed to load image', true);
                 };
                 img.src = activePage.src;
             }, [activePage?.src]);
 
-            const applyFilter = () => {
-                if (!activePage) return;
+            const applyFilter = async () => {
+                if (!activePage || !workerRef.current) return;
                 setIsProcessing(true);
-                setTimeout(() => {
-                    // Create a temp canvas with original image
-                    const tempCanvas = document.createElement('canvas');
-                    tempCanvas.width = activePage.width;
-                    tempCanvas.height = activePage.height;
-                    const tempCtx = tempCanvas.getContext('2d');
+                setProcessingMessage('Enhancing document...');
+                
+                try {
+                    const canvas = canvasRef.current;
+                    const ctx = canvas.getContext('2d');
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                     
-                    const img = new Image();
-                    img.onload = () => {
-                        tempCtx.drawImage(img, 0, 0);
+                    const result = await workerRef.current.process('enhance', {
+                        imageData: imageData.data,
+                        width: canvas.width,
+                        height: canvas.height,
+                        mode: enhanceMode,
+                        intensity: enhanceIntensity
+                    });
+                    
+                    const newImageData = new ImageData(
+                        new Uint8ClampedArray(result.data),
+                        result.width,
+                        result.height
+                    );
+                    ctx.putImageData(newImageData, 0, 0);
+                    
+                    const newSrc = canvas.toDataURL('image/png');
+                    setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: newSrc } : p));
+                    setHasUnsavedChanges(true);
+                    showToast('Enhancement applied');
+                } catch (err) {
+                    console.error('Enhancement error:', err);
+                    showToast(`Enhancement failed: ${err.message}`, true);
+                } finally {
+                    setIsProcessing(false);
+                    setProcessingMessage('Processing...');
+                }
+            };
+
+            const applyFilterToAll = async () => {
+                if (pages.length === 0 || !workerRef.current) return;
+                setIsProcessing(true);
+                
+                try {
+                    for (let i = 0; i < pages.length; i++) {
+                        setProcessingMessage(`Enhancing page ${i + 1}/${pages.length}...`);
+                        const page = pages[i];
                         
-                        // Get original data
-                        const originalData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+                        // Load image to temp canvas
+                        const img = await new Promise((resolve, reject) => {
+                            const image = new Image();
+                            image.onload = () => resolve(image);
+                            image.onerror = reject;
+                            image.src = page.src;
+                        });
                         
-                        // Get fully enhanced data
-                        const enhancedData = getEnhancedImageData(tempCtx, tempCanvas.width, tempCanvas.height, enhanceMode);
+                        const tempCanvas = document.createElement('canvas');
+                        tempCanvas.width = page.width;
+                        tempCanvas.height = page.height;
+                        const ctx = tempCanvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
                         
-                        // Blend based on intensity
-                        const blendedData = blendImageData(originalData, enhancedData, enhanceIntensity);
+                        const imageData = ctx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
                         
-                        // Apply to main canvas
-                        const canvas = canvasRef.current;
-                        const ctx = canvas.getContext('2d');
-                        ctx.putImageData(blendedData, 0, 0);
+                        const result = await workerRef.current.process('enhance', {
+                            imageData: imageData.data,
+                            width: tempCanvas.width,
+                            height: tempCanvas.height,
+                            mode: enhanceMode,
+                            intensity: enhanceIntensity
+                        });
                         
-                        // Save result
-                        const newSrc = canvas.toDataURL('image/png');
-                        setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: newSrc } : p));
-                        setIsProcessing(false);
-                    };
-                    img.src = activePage.src;
-                }, 50);
+                        const newImageData = new ImageData(
+                            new Uint8ClampedArray(result.data),
+                            result.width,
+                            result.height
+                        );
+                        ctx.putImageData(newImageData, 0, 0);
+                        
+                        const newSrc = tempCanvas.toDataURL('image/png');
+                        setPages(prev => prev.map(p => p.id === page.id ? { ...p, src: newSrc } : p));
+                    }
+                    
+                    setHasUnsavedChanges(true);
+                    showToast(`Enhanced ${pages.length} page(s)`);
+                } catch (err) {
+                    console.error('Batch enhancement error:', err);
+                    showToast(`Batch enhancement failed: ${err.message}`, true);
+                } finally {
+                    setIsProcessing(false);
+                    setProcessingMessage('Processing...');
+                }
             };
 
             const resetImage = () => {
@@ -621,6 +1141,8 @@
                 setCropPoints(null);
                 setCropMode(false);
                 setPaintHistory([]);
+                setHasUnsavedChanges(true);
+                showToast('Reset to original');
             };
 
             const rotateActivePage = () => {
@@ -631,17 +1153,17 @@
                 img.onload = () => {
                     canvas.width = activePage.height;
                     canvas.height = activePage.width;
-                    ctx.translate(canvas.width/2, canvas.height/2);
+                    ctx.translate(canvas.width / 2, canvas.height / 2);
                     ctx.rotate(90 * Math.PI / 180);
-                    ctx.drawImage(img, -activePage.width/2, -activePage.height/2);
-                    // Use PNG for lossless internal storage
+                    ctx.drawImage(img, -activePage.width / 2, -activePage.height / 2);
                     const newSrc = canvas.toDataURL('image/png');
                     setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: newSrc, width: canvas.width, height: canvas.height } : p));
+                    setHasUnsavedChanges(true);
                 };
                 img.src = activePage.src;
             };
 
-            // Crop point dragging (constrained within bounds)
+            // Crop point handling
             const handleCropPointMouseDown = (index, e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -651,7 +1173,6 @@
             const handleViewerMouseMove = (e) => {
                 if (isDraggingPoint === null || !cropPoints || !viewerRef.current) return;
                 const rect = viewerRef.current.getBoundingClientRect();
-                // Constrain to document bounds
                 const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
                 const y = Math.max(0, Math.min(e.clientY - rect.top, rect.height));
                 setCropPoints(prev => {
@@ -665,16 +1186,25 @@
                 if (isDraggingPoint !== null) setIsDraggingPoint(null);
                 if (isPainting) {
                     setIsPainting(false);
-                    // Use PNG for lossless internal storage
                     const newSrc = canvasRef.current.toDataURL('image/png');
                     setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: newSrc } : p));
+                    setHasUnsavedChanges(true);
                 }
             };
 
-            const executePerspectiveCrop = () => {
-                if (!cropPoints || !canvasRef.current || !activePage || !viewerRef.current) return;
+            const executePerspectiveCrop = async () => {
+                if (!cropPoints || !canvasRef.current || !activePage || !viewerRef.current || !workerRef.current) return;
+                
+                // Validate polygon
+                if (!isValidPolygon(cropPoints)) {
+                    showToast('Invalid crop shape - corners may be overlapping', true);
+                    return;
+                }
+                
                 setIsProcessing(true);
-                setTimeout(() => {
+                setProcessingMessage('Applying perspective crop...');
+                
+                try {
                     const canvas = canvasRef.current;
                     const rect = viewerRef.current.getBoundingClientRect();
                     const scaleX = canvas.width / rect.width;
@@ -688,27 +1218,75 @@
                     const outputWidth = Math.round(Math.max(width1, width2));
                     const outputHeight = Math.round(Math.max(height1, height2));
                     
-                    try {
-                        const resultCanvas = applyPerspectiveTransform(canvas, scaledPoints, outputWidth, outputHeight);
-                        // Use PNG for lossless internal storage
-                        const newSrc = resultCanvas.toDataURL('image/png');
-                        setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: newSrc, width: outputWidth, height: outputHeight } : p));
-                        setCropPoints(null);
-                        setCropMode(false);
-                    } catch (err) { alert("Crop failed: " + err.message); }
+                    // Validate output dimensions
+                    if (outputWidth < 10 || outputHeight < 10) {
+                        showToast('Crop area too small', true);
+                        setIsProcessing(false);
+                        return;
+                    }
+                    
+                    if (outputWidth > 10000 || outputHeight > 10000) {
+                        showToast('Crop area too large', true);
+                        setIsProcessing(false);
+                        return;
+                    }
+                    
+                    const ctx = canvas.getContext('2d');
+                    const sourceData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    
+                    const result = await workerRef.current.process('transform', {
+                        sourceData: sourceData.data,
+                        sourceWidth: canvas.width,
+                        sourceHeight: canvas.height,
+                        srcPoints: scaledPoints,
+                        outputWidth,
+                        outputHeight
+                    });
+                    
+                    // Create result canvas
+                    const resultCanvas = document.createElement('canvas');
+                    resultCanvas.width = result.width;
+                    resultCanvas.height = result.height;
+                    const resultCtx = resultCanvas.getContext('2d');
+                    const newImageData = new ImageData(
+                        new Uint8ClampedArray(result.data),
+                        result.width,
+                        result.height
+                    );
+                    resultCtx.putImageData(newImageData, 0, 0);
+                    
+                    const newSrc = resultCanvas.toDataURL('image/png');
+                    setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: newSrc, width: outputWidth, height: outputHeight } : p));
+                    setCropPoints(null);
+                    setCropMode(false);
+                    setHasUnsavedChanges(true);
+                    showToast('Crop applied');
+                } catch (err) {
+                    console.error('Crop error:', err);
+                    showToast(`Crop failed: ${err.message}`, true);
+                } finally {
                     setIsProcessing(false);
-                }, 50);
+                    setProcessingMessage('Processing...');
+                }
             };
 
             // Paint handlers
             const handlePaintMouseDown = (e) => {
                 if (!activePage || activeTool !== 'paint' || cropMode) return;
                 
-                // Save current canvas state before painting
+                // Save current canvas state before painting (limit history size)
                 const canvas = canvasRef.current;
                 const ctx = canvas.getContext('2d');
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                setPaintHistory(prev => [...prev.slice(-19), imageData]); // Keep last 20 states
+                
+                // Only store if we haven't exceeded limit
+                if (paintHistory.length < MAX_UNDO_STATES) {
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    setPaintHistory(prev => [...prev, canvas.toDataURL('image/png')]); // Store as compressed PNG
+                } else {
+                    // Remove oldest and add new
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    setPaintHistory(prev => [...prev.slice(1), canvas.toDataURL('image/png')]);
+                }
                 
                 const rect = canvas.getBoundingClientRect();
                 const scaleX = canvas.width / rect.width;
@@ -725,27 +1303,35 @@
                 setIsPainting(true);
             };
 
-            const undoLastStroke = () => {
+            const undoLastStroke = useCallback(() => {
                 if (paintHistory.length === 0 || !canvasRef.current) return;
+                
                 const canvas = canvasRef.current;
                 const ctx = canvas.getContext('2d');
                 const lastState = paintHistory[paintHistory.length - 1];
-                ctx.putImageData(lastState, 0, 0);
+                
+                // Load the PNG data back
+                const img = new Image();
+                img.onload = () => {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0);
+                    const newSrc = canvas.toDataURL('image/png');
+                    setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: newSrc } : p));
+                };
+                img.src = lastState;
+                
                 setPaintHistory(prev => prev.slice(0, -1));
-                // Save the restored state
-                const newSrc = canvas.toDataURL('image/png');
-                setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: newSrc } : p));
-            };
+                setHasUnsavedChanges(true);
+            }, [paintHistory, activePageId]);
 
             const clearAllPaint = () => {
                 if (!activePage || !canvasRef.current) return;
-                // Reset to original and clear history
                 setPages(prev => prev.map(p => p.id === activePageId ? { ...p, src: p.originalSrc } : p));
                 setPaintHistory([]);
+                setHasUnsavedChanges(true);
             };
 
             const handlePaintMouseMove = (e) => {
-                // Update brush cursor position when in paint mode
                 if (activeTool === 'paint' && !cropMode && viewerRef.current) {
                     const rect = viewerRef.current.getBoundingClientRect();
                     setBrushCursor({
@@ -779,35 +1365,108 @@
             const exportFile = (type) => {
                 if (!activePage || !canvasRef.current) return;
                 const canvas = canvasRef.current;
-                if (type === 'jpg') {
-                    const link = document.createElement('a');
-                    link.download = `doc-${activePage.name}.jpg`;
-                    // Use maximum quality for export
-                    link.href = canvas.toDataURL('image/jpeg', 1.0);
-                    link.click();
-                } else if (type === 'png') {
-                    const link = document.createElement('a');
-                    link.download = `doc-${activePage.name}.png`;
-                    link.href = canvas.toDataURL('image/png');
-                    link.click();
-                } else {
+                
+                try {
+                    if (type === 'jpg') {
+                        const link = document.createElement('a');
+                        link.download = `doc-${activePage.name}.jpg`;
+                        link.href = canvas.toDataURL('image/jpeg', 1.0);
+                        link.click();
+                        showToast('Exported as JPG');
+                    } else if (type === 'png') {
+                        const link = document.createElement('a');
+                        link.download = `doc-${activePage.name}.png`;
+                        link.href = canvas.toDataURL('image/png');
+                        link.click();
+                        showToast('Exported as PNG');
+                    } else {
+                        const { jsPDF } = window.jspdf;
+                        if (!jsPDF) {
+                            showToast('PDF engine not loaded', true);
+                            return;
+                        }
+                        const orient = canvas.width > canvas.height ? 'l' : 'p';
+                        const doc = new jsPDF({ orientation: orient, unit: 'px', format: [canvas.width, canvas.height] });
+                        doc.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+                        doc.save(`doc-${activePage.name}.pdf`);
+                        showToast('Exported as PDF');
+                    }
+                } catch (err) {
+                    showToast(`Export failed: ${err.message}`, true);
+                }
+            };
+
+            const exportAllAsPdf = async () => {
+                if (pages.length === 0) return;
+                
+                try {
                     const { jsPDF } = window.jspdf;
-                    if (!jsPDF) return alert("PDF Engine not loaded");
-                    const orient = canvas.width > canvas.height ? 'l' : 'p';
-                    const doc = new jsPDF({ orientation: orient, unit: 'px', format: [canvas.width, canvas.height] });
-                    // Use PNG for highest quality in PDF
-                    doc.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
-                    doc.save(`doc-${activePage.name}.pdf`);
+                    if (!jsPDF) {
+                        showToast('PDF engine not loaded', true);
+                        return;
+                    }
+                    
+                    setIsProcessing(true);
+                    setProcessingMessage('Creating PDF...');
+                    
+                    let doc = null;
+                    
+                    for (let i = 0; i < pages.length; i++) {
+                        setProcessingMessage(`Adding page ${i + 1}/${pages.length}...`);
+                        const page = pages[i];
+                        
+                        const img = await new Promise((resolve, reject) => {
+                            const image = new Image();
+                            image.onload = () => resolve(image);
+                            image.onerror = reject;
+                            image.src = page.src;
+                        });
+                        
+                        const orient = page.width > page.height ? 'l' : 'p';
+                        
+                        if (i === 0) {
+                            doc = new jsPDF({ orientation: orient, unit: 'px', format: [page.width, page.height] });
+                        } else {
+                            doc.addPage([page.width, page.height], orient);
+                        }
+                        
+                        doc.addImage(page.src, 'PNG', 0, 0, page.width, page.height);
+                    }
+                    
+                    doc.save('document-all-pages.pdf');
+                    showToast(`Exported ${pages.length} page(s) as PDF`);
+                } catch (err) {
+                    showToast(`Export failed: ${err.message}`, true);
+                } finally {
+                    setIsProcessing(false);
+                    setProcessingMessage('Processing...');
+                }
+            };
+
+            const deletePage = async (pageId) => {
+                try {
+                    await storage.deletePage(pageId);
+                    const newPages = pages.filter(p => p.id !== pageId);
+                    setPages(newPages);
+                    if (activePageId === pageId) {
+                        setActivePageId(newPages[0]?.id || null);
+                    }
+                    setHasUnsavedChanges(true);
+                } catch (err) {
+                    console.error('Delete failed:', err);
                 }
             };
 
             const renderCropOverlay = () => {
                 if (!cropMode || !cropPoints) return null;
+                
+                const isValid = isValidPolygon(cropPoints);
                 const pathData = `M ${cropPoints[0].x} ${cropPoints[0].y} L ${cropPoints[1].x} ${cropPoints[1].y} L ${cropPoints[2].x} ${cropPoints[2].y} L ${cropPoints[3].x} ${cropPoints[3].y} Z`;
+                const strokeColor = isValid ? 'hsl(240, 5.9%, 10%)' : 'hsl(0, 84.2%, 60.2%)';
                 
                 return (
                     <div className="absolute inset-0 z-20" onMouseMove={handleViewerMouseMove} onMouseUp={handleViewerMouseUp} onMouseLeave={handleViewerMouseUp}>
-                        <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                        <svg className="absolute inset-0 w-full h-full pointer-events-none" role="img" aria-label="Crop selection area">
                             <defs>
                                 <mask id="cropMask">
                                     <rect width="100%" height="100%" fill="white" />
@@ -815,62 +1474,96 @@
                                 </mask>
                             </defs>
                             <rect width="100%" height="100%" fill="rgba(0,0,0,0.4)" mask="url(#cropMask)" />
-                            <path d={pathData} fill="none" stroke="hsl(240, 5.9%, 10%)" strokeWidth="2" />
+                            <path d={pathData} fill="none" stroke={strokeColor} strokeWidth="2" />
                             <line x1={(cropPoints[0].x + cropPoints[1].x) / 2} y1={(cropPoints[0].y + cropPoints[1].y) / 2}
                                   x2={(cropPoints[3].x + cropPoints[2].x) / 2} y2={(cropPoints[3].y + cropPoints[2].y) / 2}
-                                  stroke="hsl(240, 5.9%, 10%)" strokeWidth="1" strokeDasharray="4,4" opacity="0.5" />
+                                  stroke={strokeColor} strokeWidth="1" strokeDasharray="4,4" opacity="0.5" />
                             <line x1={(cropPoints[0].x + cropPoints[3].x) / 2} y1={(cropPoints[0].y + cropPoints[3].y) / 2}
                                   x2={(cropPoints[1].x + cropPoints[2].x) / 2} y2={(cropPoints[1].y + cropPoints[2].y) / 2}
-                                  stroke="hsl(240, 5.9%, 10%)" strokeWidth="1" strokeDasharray="4,4" opacity="0.5" />
+                                  stroke={strokeColor} strokeWidth="1" strokeDasharray="4,4" opacity="0.5" />
                         </svg>
                         {cropPoints.map((point, index) => (
-                            <div key={index} className="crop-handle" style={{ left: point.x, top: point.y }} onMouseDown={(e) => handleCropPointMouseDown(index, e)} />
+                            <div 
+                                key={index} 
+                                className="crop-handle" 
+                                style={{ left: point.x, top: point.y }}
+                                tabIndex={0}
+                                role="slider"
+                                aria-label={`Crop corner ${index + 1}`}
+                                aria-valuetext={`Position ${Math.round(point.x)}, ${Math.round(point.y)}`}
+                                onMouseDown={(e) => handleCropPointMouseDown(index, e)}
+                                onFocus={() => setFocusedCropHandle(index)}
+                                onBlur={() => setFocusedCropHandle(null)}
+                            />
                         ))}
+                        {!isValid && (
+                            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-destructive text-destructive-foreground px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-2">
+                                <AlertCircle className="w-3 h-3" />
+                                Invalid shape - corners overlapping
+                            </div>
+                        )}
                     </div>
                 );
             };
 
-            // Calculate displayed dimensions
             const displayWidth = activePage ? activePage.width * (zoom / 100) : 0;
             const displayHeight = activePage ? activePage.height * (zoom / 100) : 0;
 
             return (
                 <div className="flex flex-col h-screen w-full bg-background font-sans">
                     
-                    <header className="h-14 border-b flex items-center justify-between px-6 bg-background/80 backdrop-blur-sm z-50">
+                    <header className="h-14 border-b flex items-center justify-between px-6 bg-background/80 backdrop-blur-sm z-50" role="banner">
                         <div className="flex items-center gap-2">
                             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                                <ScanLine className="w-5 h-5 text-primary-foreground" />
+                                <ScanLine className="w-5 h-5 text-primary-foreground" aria-hidden="true" />
                             </div>
                             <span className="font-semibold text-lg tracking-tight">simple</span>
                         </div>
                         <div className="flex items-center gap-2">
-                             <Button variant="outline" size="sm" onClick={() => fileInputRef.current.click()}>
-                                <Plus className="w-4 h-4 mr-2" /> Add Pages
-                             </Button>
-                             <div className="flex items-center border rounded-md ml-2">
-                                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none" onClick={() => setZoom(z => Math.max(10, z - 10))}><ZoomOut className="w-3 h-3" /></Button>
-                                <span className="w-12 text-center text-xs font-medium">{zoom}%</span>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none" onClick={() => setZoom(z => Math.min(300, z + 10))}><ZoomIn className="w-3 h-3" /></Button>
+                            <Button variant="outline" size="sm" onClick={() => fileInputRef.current.click()} aria-label="Add pages">
+                                <Plus className="w-4 h-4 mr-2" aria-hidden="true" /> Add Pages
+                            </Button>
+                            <div className="flex items-center border rounded-md ml-2" role="group" aria-label="Zoom controls">
+                                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none" onClick={() => setZoom(z => Math.max(10, z - 10))} aria-label="Zoom out">
+                                    <ZoomOut className="w-3 h-3" aria-hidden="true" />
+                                </Button>
+                                <span className="w-12 text-center text-xs font-medium" aria-live="polite">{zoom}%</span>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none" onClick={() => setZoom(z => Math.min(300, z + 10))} aria-label="Zoom in">
+                                    <ZoomIn className="w-3 h-3" aria-hidden="true" />
+                                </Button>
                             </div>
                         </div>
                     </header>
 
                     <div className="flex-1 flex overflow-hidden">
                         
-                        <div className="w-64 border-r bg-muted/10 flex flex-col">
+                        <aside className="w-64 border-r bg-muted/10 flex flex-col" role="navigation" aria-label="Document pages">
                             <div className="p-4 border-b flex items-center justify-between">
                                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Documents</span>
                                 <span className="text-xs text-muted-foreground">{pages.length} Pages</span>
                             </div>
-                            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                            <div className="flex-1 overflow-y-auto p-4 space-y-4" role="list">
                                 {pages.map((page, idx) => (
-                                    <div key={page.id} onClick={() => { setActivePageId(page.id); setCropMode(false); setCropPoints(null); setPaintHistory([]); }}
-                                         className={cn("group relative aspect-[3/4] border-2 rounded-lg overflow-hidden cursor-pointer transition-all hover:border-primary/50", activePageId === page.id ? "border-primary ring-2 ring-primary/10" : "border-border bg-white")}>
-                                        <img src={page.src} className="w-full h-full object-cover" />
+                                    <div 
+                                        key={page.id} 
+                                        onClick={() => { setActivePageId(page.id); setCropMode(false); setCropPoints(null); setPaintHistory([]); }}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setActivePageId(page.id); setCropMode(false); setCropPoints(null); }}}
+                                        tabIndex={0}
+                                        role="listitem"
+                                        aria-selected={activePageId === page.id}
+                                        aria-label={`Page ${idx + 1}: ${page.name}`}
+                                        className={cn("group relative aspect-[3/4] border-2 rounded-lg overflow-hidden cursor-pointer transition-all hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-ring", activePageId === page.id ? "border-primary ring-2 ring-primary/10" : "border-border bg-white")}
+                                    >
+                                        <img src={page.src} className="w-full h-full object-cover" alt={`Page ${idx + 1}`} />
                                         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Button variant="destructive" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); const np = pages.filter(p => p.id !== page.id); setPages(np); if(activePageId === page.id) setActivePageId(np[0]?.id || null); }}>
-                                                <Trash2 className="w-3 h-3" />
+                                            <Button 
+                                                variant="destructive" 
+                                                size="icon" 
+                                                className="h-6 w-6" 
+                                                onClick={(e) => { e.stopPropagation(); deletePage(page.id); }}
+                                                aria-label={`Delete page ${idx + 1}`}
+                                            >
+                                                <Trash2 className="w-3 h-3" aria-hidden="true" />
                                             </Button>
                                         </div>
                                         <div className="absolute bottom-0 inset-x-0 bg-background/90 border-t p-1 text-center text-[10px] font-medium text-muted-foreground truncate px-2">{idx + 1}. {page.name}</div>
@@ -882,10 +1575,9 @@
                                     </div>
                                 )}
                             </div>
-                        </div>
+                        </aside>
 
-                        {/* Fixed scrolling container */}
-                        <div ref={containerRef} className="flex-1 bg-muted/10 bg-dot-pattern overflow-hidden relative">
+                        <main ref={containerRef} id="main-content" className="flex-1 bg-muted/10 bg-dot-pattern overflow-hidden relative" role="main">
                             <div ref={scrollContainerRef} className="scroll-container">
                                 <div 
                                     className="scroll-content"
@@ -904,11 +1596,15 @@
                                              onMouseMove={(e) => { handleViewerMouseMove(e); handlePaintMouseMove(e); }} 
                                              onMouseUp={handleViewerMouseUp} 
                                              onMouseLeave={(e) => { handleViewerMouseUp(); handleViewerMouseLeave(); }}
-                                             onMouseEnter={handleViewerMouseEnter}>
+                                             onMouseEnter={handleViewerMouseEnter}
+                                        >
                                             
-                                            <canvas ref={canvasRef} className={cn("w-full h-full block", cropMode ? "cursor-default" : activeTool === 'paint' ? "cursor-none" : "cursor-default")} />
+                                            <canvas 
+                                                ref={canvasRef} 
+                                                className={cn("w-full h-full block", cropMode ? "cursor-default" : activeTool === 'paint' ? "cursor-none" : "cursor-default")} 
+                                                aria-label="Document canvas"
+                                            />
                                             
-                                            {/* Brush cursor overlay */}
                                             {activeTool === 'paint' && !cropMode && brushCursor.visible && (
                                                 <div 
                                                     className="pointer-events-none absolute rounded-full border-2 transition-[width,height] duration-75"
@@ -926,14 +1622,15 @@
                                                             ? '0 0 0 1px rgba(0,0,0,0.2)' 
                                                             : '0 0 0 1px rgba(255,255,255,0.3)',
                                                     }}
+                                                    aria-hidden="true"
                                                 />
                                             )}
                                             
                                             {isProcessing && (
-                                                <div className="absolute inset-0 bg-white/50 backdrop-blur-[2px] flex items-center justify-center z-30">
+                                                <div className="absolute inset-0 bg-white/50 backdrop-blur-[2px] flex items-center justify-center z-30" role="alert" aria-busy="true">
                                                     <div className="bg-white px-6 py-3 rounded-full shadow-lg border flex items-center gap-3">
-                                                        <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                                                        <span className="text-sm font-medium">Processing...</span>
+                                                        <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                                                        <span className="text-sm font-medium">{processingMessage}</span>
                                                     </div>
                                                 </div>
                                             )}
@@ -943,35 +1640,42 @@
                                     ) : (
                                         <div className="text-center">
                                             <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
-                                                <ImageIcon className="w-8 h-8 text-muted-foreground" />
+                                                <ImageIcon className="w-8 h-8 text-muted-foreground" aria-hidden="true" />
                                             </div>
                                             <h3 className="text-lg font-semibold">No Document Selected</h3>
                                             <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto">Upload a PDF or Image to start editing, enhancing, and exporting.</p>
                                             <Button className="mt-4" onClick={() => fileInputRef.current.click()}>Upload File</Button>
+                                            <p className="text-xs text-muted-foreground mt-2">Max 50MB per file • PDF limit: 100 pages</p>
                                         </div>
                                     )}
                                 </div>
                             </div>
-                        </div>
+                        </main>
 
-                        <div className={cn("bg-background border-l flex flex-col transition-all duration-300", rightPanelOpen ? "w-80" : "w-14")}>
+                        <aside className={cn("bg-background border-l flex flex-col transition-all duration-300", rightPanelOpen ? "w-80" : "w-14")} role="complementary" aria-label="Tools panel">
                             <div className="h-12 border-b flex items-center px-2 justify-between">
                                 {rightPanelOpen && <span className="font-semibold text-sm px-2">Tools</span>}
-                                <Button variant="ghost" size="icon" onClick={() => setRightPanelOpen(!rightPanelOpen)}>
-                                    {rightPanelOpen ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+                                <Button variant="ghost" size="icon" onClick={() => setRightPanelOpen(!rightPanelOpen)} aria-label={rightPanelOpen ? "Collapse tools panel" : "Expand tools panel"}>
+                                    {rightPanelOpen ? <ChevronRight className="w-4 h-4" aria-hidden="true" /> : <ChevronLeft className="w-4 h-4" aria-hidden="true" />}
                                 </Button>
                             </div>
 
                             <div className="flex-1 overflow-y-auto">
-                                <div className={cn("grid gap-1 p-2", rightPanelOpen ? "grid-cols-4" : "grid-cols-1")}>
+                                <div className={cn("grid gap-1 p-2", rightPanelOpen ? "grid-cols-4" : "grid-cols-1")} role="tablist">
                                     {['enhance', 'edit', 'paint', 'export'].map(t => (
-                                        <button key={t} onClick={() => { setActiveTool(t); if (t !== 'edit') { setCropMode(false); setCropPoints(null); } if (!rightPanelOpen) setRightPanelOpen(true); }}
-                                                className={cn("flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 text-[10px] font-medium transition-colors uppercase", 
-                                                activeTool === t ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
-                                            {t === 'enhance' && <Sparkles className="w-4 h-4" />}
-                                            {t === 'edit' && <Crop className="w-4 h-4" />}
-                                            {t === 'paint' && <Paintbrush className="w-4 h-4" />}
-                                            {t === 'export' && <Download className="w-4 h-4" />}
+                                        <button 
+                                            key={t} 
+                                            onClick={() => { setActiveTool(t); if (t !== 'edit') { setCropMode(false); setCropPoints(null); } if (!rightPanelOpen) setRightPanelOpen(true); }}
+                                            role="tab"
+                                            aria-selected={activeTool === t}
+                                            aria-controls={`${t}-panel`}
+                                            className={cn("flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 text-[10px] font-medium transition-colors uppercase focus:outline-none focus:ring-2 focus:ring-ring", 
+                                            activeTool === t ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}
+                                        >
+                                            {t === 'enhance' && <Sparkles className="w-4 h-4" aria-hidden="true" />}
+                                            {t === 'edit' && <Crop className="w-4 h-4" aria-hidden="true" />}
+                                            {t === 'paint' && <Paintbrush className="w-4 h-4" aria-hidden="true" />}
+                                            {t === 'export' && <Download className="w-4 h-4" aria-hidden="true" />}
                                             {rightPanelOpen && <span>{t}</span>}
                                         </button>
                                     ))}
@@ -982,42 +1686,48 @@
                                     <div className="p-4 space-y-6">
                                         
                                         {activeTool === 'enhance' && (
-                                            <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                                            <div id="enhance-panel" role="tabpanel" className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
                                                 <div>
                                                     <h3 className="font-medium text-sm mb-1">Document Enhancement</h3>
                                                     <p className="text-xs text-muted-foreground">Transform photos into clean scanned documents.</p>
                                                 </div>
-                                                <div className="grid grid-cols-2 gap-2">
+                                                <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Enhancement mode">
                                                     {[
                                                         { id: 'auto', label: 'Auto', desc: 'Balanced' },
                                                         { id: 'scan', label: 'Scan', desc: 'Clean B&W' },
                                                         { id: 'lighten', label: 'Lighten', desc: 'Remove shadows' },
                                                         { id: 'sharpen', label: 'Sharpen', desc: 'Increase clarity' }
                                                     ].map(mode => (
-                                                        <button key={mode.id} onClick={() => setEnhanceMode(mode.id)}
-                                                            className={cn("p-2 rounded-md border text-left transition-all", 
-                                                            enhanceMode === mode.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/50")}>
+                                                        <button 
+                                                            key={mode.id} 
+                                                            onClick={() => setEnhanceMode(mode.id)}
+                                                            role="radio"
+                                                            aria-checked={enhanceMode === mode.id}
+                                                            className={cn("p-2 rounded-md border text-left transition-all focus:outline-none focus:ring-2 focus:ring-ring", 
+                                                            enhanceMode === mode.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/50")}
+                                                        >
                                                             <div className="text-xs font-medium">{mode.label}</div>
                                                             <div className="text-[10px] text-muted-foreground">{mode.desc}</div>
                                                         </button>
                                                     ))}
                                                 </div>
                                                 
-                                                <Button className="w-full" onClick={applyFilter}><Wand2 className="w-4 h-4 mr-2" /> Apply Enhancement</Button>
-                                                
-                                                {/* Intensity Slider */}
                                                 <div className="space-y-2 p-3 bg-muted/30 rounded-lg border">
                                                     <div className="flex items-center justify-between">
-                                                        <label className="text-xs font-medium">Intensity</label>
+                                                        <label htmlFor="intensity-slider" className="text-xs font-medium">Intensity</label>
                                                         <span className="text-xs font-semibold tabular-nums bg-background px-2 py-0.5 rounded border">{enhanceIntensity}%</span>
                                                     </div>
                                                     <input 
+                                                        id="intensity-slider"
                                                         type="range" 
                                                         min="0" 
                                                         max="100" 
                                                         value={enhanceIntensity} 
                                                         onChange={(e) => setEnhanceIntensity(parseInt(e.target.value))} 
                                                         className="intensity-slider w-full"
+                                                        aria-valuemin={0}
+                                                        aria-valuemax={100}
+                                                        aria-valuenow={enhanceIntensity}
                                                     />
                                                     <div className="flex justify-between text-[10px] text-muted-foreground">
                                                         <span>Subtle</span>
@@ -1025,57 +1735,97 @@
                                                     </div>
                                                 </div>
                                                 
-                                                <Button variant="outline" className="w-full" onClick={resetImage}><RefreshCw className="w-4 h-4 mr-2" /> Reset to Original</Button>
+                                                <Button className="w-full" onClick={applyFilter} disabled={isProcessing}>
+                                                    <Wand2 className="w-4 h-4 mr-2" aria-hidden="true" /> Apply to This Page
+                                                </Button>
+                                                
+                                                {pages.length > 1 && (
+                                                    <Button variant="outline" className="w-full" onClick={applyFilterToAll} disabled={isProcessing}>
+                                                        <Sparkles className="w-4 h-4 mr-2" aria-hidden="true" /> Apply to All Pages
+                                                    </Button>
+                                                )}
+                                                
+                                                <Button variant="outline" className="w-full" onClick={resetImage}>
+                                                    <RefreshCw className="w-4 h-4 mr-2" aria-hidden="true" /> Reset to Original
+                                                </Button>
+                                                
                                                 <Separator />
-                                                <Button variant="secondary" className="w-full" onClick={rotateActivePage}><RotateCw className="w-4 h-4 mr-2" /> Rotate 90°</Button>
+                                                
+                                                <Button variant="secondary" className="w-full" onClick={rotateActivePage}>
+                                                    <RotateCw className="w-4 h-4 mr-2" aria-hidden="true" /> Rotate 90°
+                                                </Button>
                                             </div>
                                         )}
 
                                         {activeTool === 'edit' && (
-                                            <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                                            <div id="edit-panel" role="tabpanel" className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
                                                 <div>
                                                     <h3 className="font-medium text-sm mb-1">Perspective Crop</h3>
                                                     <p className="text-xs text-muted-foreground">Drag the 4 corners to select your document. Corrects perspective automatically.</p>
                                                 </div>
                                                 {!cropMode ? (
-                                                    <Button className="w-full" onClick={() => setCropMode(true)}><Crop className="w-4 h-4 mr-2" /> Start Crop</Button>
+                                                    <Button className="w-full" onClick={() => setCropMode(true)}>
+                                                        <Crop className="w-4 h-4 mr-2" aria-hidden="true" /> Start Crop
+                                                    </Button>
                                                 ) : (
                                                     <div className="space-y-2">
                                                         <div className="bg-muted/50 p-3 rounded-md border text-xs text-center text-muted-foreground">
-                                                            Drag corner handles to adjust
+                                                            Drag corners or use arrow keys when focused
                                                         </div>
-                                                        <Button className="w-full" onClick={executePerspectiveCrop}><Check className="w-4 h-4 mr-2" /> Apply Crop</Button>
-                                                        <Button variant="ghost" className="w-full text-destructive hover:text-destructive" onClick={() => { setCropMode(false); setCropPoints(null); }}>Cancel</Button>
+                                                        <Button 
+                                                            className="w-full" 
+                                                            onClick={executePerspectiveCrop}
+                                                            disabled={isProcessing || !isValidPolygon(cropPoints)}
+                                                        >
+                                                            <Check className="w-4 h-4 mr-2" aria-hidden="true" /> Apply Crop
+                                                        </Button>
+                                                        <Button variant="ghost" className="w-full text-destructive hover:text-destructive" onClick={() => { setCropMode(false); setCropPoints(null); }}>Cancel (Esc)</Button>
                                                     </div>
                                                 )}
                                             </div>
                                         )}
 
                                         {activeTool === 'paint' && (
-                                            <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                                            <div id="paint-panel" role="tabpanel" className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
                                                 <div>
                                                     <h3 className="font-medium text-sm mb-1">Correction Tool</h3>
-                                                    <p className="text-xs text-muted-foreground">Use white to erase marks, black to fill text.</p>
+                                                    <p className="text-xs text-muted-foreground">Use white to erase marks, black to fill text. Ctrl+Z to undo.</p>
                                                 </div>
                                                 
                                                 <div>
                                                     <label className="text-xs font-medium mb-2 block">Shade</label>
-                                                    <div className="grid grid-cols-6 gap-1.5">
+                                                    <div className="grid grid-cols-6 gap-1.5" role="radiogroup" aria-label="Brush color">
                                                         {paintColors.map(c => (
-                                                            <button key={c} onClick={() => setBrushColor(c)} 
-                                                                className={cn("w-8 h-8 rounded border transition-all", brushColor === c ? "ring-2 ring-primary ring-offset-1 scale-110" : "border-border hover:scale-105")} 
-                                                                style={{ backgroundColor: c }} />
+                                                            <button 
+                                                                key={c} 
+                                                                onClick={() => setBrushColor(c)} 
+                                                                role="radio"
+                                                                aria-checked={brushColor === c}
+                                                                aria-label={c === '#ffffff' ? 'White' : c === '#000000' ? 'Black' : `Gray ${c}`}
+                                                                className={cn("w-8 h-8 rounded border transition-all focus:outline-none focus:ring-2 focus:ring-ring", brushColor === c ? "ring-2 ring-primary ring-offset-1 scale-110" : "border-border hover:scale-105")} 
+                                                                style={{ backgroundColor: c }} 
+                                                            />
                                                         ))}
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <label className="text-xs font-medium mb-2 block">Brush Size: {brushSize}px</label>
-                                                    <input type="range" min="1" max="50" value={brushSize} onChange={(e) => setBrushSize(parseInt(e.target.value))} className="w-full accent-primary" />
+                                                    <label htmlFor="brush-size" className="text-xs font-medium mb-2 block">Brush Size: {brushSize}px</label>
+                                                    <input 
+                                                        id="brush-size"
+                                                        type="range" 
+                                                        min="1" 
+                                                        max="50" 
+                                                        value={brushSize} 
+                                                        onChange={(e) => setBrushSize(parseInt(e.target.value))} 
+                                                        className="w-full accent-primary"
+                                                        aria-valuemin={1}
+                                                        aria-valuemax={50}
+                                                        aria-valuenow={brushSize}
+                                                    />
                                                 </div>
                                                 
                                                 <Separator />
                                                 
-                                                {/* Undo and Clear Buttons */}
                                                 <div className="space-y-2">
                                                     <Button 
                                                         variant="outline" 
@@ -1083,10 +1833,10 @@
                                                         onClick={undoLastStroke}
                                                         disabled={paintHistory.length === 0}
                                                     >
-                                                        <Undo2 className="w-4 h-4 mr-2" /> 
+                                                        <Undo2 className="w-4 h-4 mr-2" aria-hidden="true" /> 
                                                         Undo Stroke
                                                         {paintHistory.length > 0 && (
-                                                            <span className="ml-auto text-xs text-muted-foreground">({paintHistory.length})</span>
+                                                            <span className="ml-auto text-xs text-muted-foreground">({paintHistory.length}/{MAX_UNDO_STATES})</span>
                                                         )}
                                                     </Button>
                                                     <Button 
@@ -1094,33 +1844,58 @@
                                                         className="w-full text-destructive hover:text-destructive hover:bg-destructive/10" 
                                                         onClick={clearAllPaint}
                                                     >
-                                                        <Eraser className="w-4 h-4 mr-2" /> Clear All Paint
+                                                        <Eraser className="w-4 h-4 mr-2" aria-hidden="true" /> Clear All Paint
                                                     </Button>
                                                 </div>
                                             </div>
                                         )}
 
                                         {activeTool === 'export' && (
-                                            <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                                            <div id="export-panel" role="tabpanel" className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
                                                 <div>
-                                                    <h3 className="font-medium text-sm mb-1">Export Page</h3>
+                                                    <h3 className="font-medium text-sm mb-1">Export Current Page</h3>
                                                     <p className="text-xs text-muted-foreground">Save current page to device.</p>
                                                 </div>
                                                 <div className="grid grid-cols-3 gap-3">
-                                                    <button onClick={() => exportFile('pdf')} className="flex flex-col items-center justify-center p-4 rounded-lg border bg-card hover:bg-accent hover:text-accent-foreground transition-colors text-center gap-2">
-                                                        <FileText className="w-6 h-6 text-red-500" />
+                                                    <button 
+                                                        onClick={() => exportFile('pdf')} 
+                                                        className="flex flex-col items-center justify-center p-4 rounded-lg border bg-card hover:bg-accent hover:text-accent-foreground transition-colors text-center gap-2 focus:outline-none focus:ring-2 focus:ring-ring"
+                                                        aria-label="Export as PDF"
+                                                    >
+                                                        <FileText className="w-6 h-6 text-red-500" aria-hidden="true" />
                                                         <span className="text-xs font-medium">PDF</span>
                                                     </button>
-                                                    <button onClick={() => exportFile('png')} className="flex flex-col items-center justify-center p-4 rounded-lg border bg-card hover:bg-accent hover:text-accent-foreground transition-colors text-center gap-2">
-                                                        <ImageIcon className="w-6 h-6 text-green-500" />
+                                                    <button 
+                                                        onClick={() => exportFile('png')} 
+                                                        className="flex flex-col items-center justify-center p-4 rounded-lg border bg-card hover:bg-accent hover:text-accent-foreground transition-colors text-center gap-2 focus:outline-none focus:ring-2 focus:ring-ring"
+                                                        aria-label="Export as PNG"
+                                                    >
+                                                        <ImageIcon className="w-6 h-6 text-green-500" aria-hidden="true" />
                                                         <span className="text-xs font-medium">PNG</span>
                                                     </button>
-                                                    <button onClick={() => exportFile('jpg')} className="flex flex-col items-center justify-center p-4 rounded-lg border bg-card hover:bg-accent hover:text-accent-foreground transition-colors text-center gap-2">
-                                                        <ImageIcon className="w-6 h-6 text-blue-500" />
+                                                    <button 
+                                                        onClick={() => exportFile('jpg')} 
+                                                        className="flex flex-col items-center justify-center p-4 rounded-lg border bg-card hover:bg-accent hover:text-accent-foreground transition-colors text-center gap-2 focus:outline-none focus:ring-2 focus:ring-ring"
+                                                        aria-label="Export as JPG"
+                                                    >
+                                                        <ImageIcon className="w-6 h-6 text-blue-500" aria-hidden="true" />
                                                         <span className="text-xs font-medium">JPG</span>
                                                     </button>
                                                 </div>
                                                 <p className="text-[10px] text-muted-foreground text-center">PNG for best quality, JPG for smaller size</p>
+                                                
+                                                {pages.length > 1 && (
+                                                    <>
+                                                        <Separator />
+                                                        <div>
+                                                            <h3 className="font-medium text-sm mb-1">Export All Pages</h3>
+                                                            <p className="text-xs text-muted-foreground mb-3">Combine all pages into a single PDF.</p>
+                                                            <Button className="w-full" onClick={exportAllAsPdf} disabled={isProcessing}>
+                                                                <FileText className="w-4 h-4 mr-2" aria-hidden="true" /> Export All as PDF ({pages.length} pages)
+                                                            </Button>
+                                                        </div>
+                                                    </>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -1130,10 +1905,18 @@
                                     <div className="p-8 text-center text-xs text-muted-foreground">Select a page to view tools.</div>
                                 )}
                             </div>
-                        </div>
+                        </aside>
                     </div>
                     
-                    <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" multiple accept="image/*,application/pdf" />
+                    <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        onChange={handleFileUpload} 
+                        className="hidden" 
+                        multiple 
+                        accept="image/*,application/pdf"
+                        aria-label="Upload files"
+                    />
                 </div>
             );
         }
