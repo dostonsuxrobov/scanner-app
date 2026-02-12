@@ -1,12 +1,8 @@
 // ============================================================
-// image-processor.js — Web Worker
-// Each function does ONE thing. Composed into pipelines at the end.
+// image-processor.js — Web Worker (optimized)
 // ============================================================
 
-// ---- INTEGRAL IMAGES (the shared speedup trick) ----
-// An integral image lets you compute the sum of any rectangular
-// region in O(1) instead of O(window²). We build two: one for
-// the values and one for the squared values (needed by Sauvola).
+// ---- INTEGRAL IMAGES ----
 
 function buildIntegralImages(gray, w, h) {
   const sum = new Float64Array(w * h);
@@ -27,7 +23,6 @@ function buildIntegralImages(gray, w, h) {
   return { sum, sqSum };
 }
 
-// Query a rectangular region from an integral image in O(1)
 function integralQuery(img, w, x1, y1, x2, y2) {
   const d = img[y2 * w + x2];
   const a = x1 > 0 && y1 > 0 ? img[(y1 - 1) * w + (x1 - 1)] : 0;
@@ -36,7 +31,7 @@ function integralQuery(img, w, x1, y1, x2, y2) {
   return d - b - c + a;
 }
 
-// ---- CONVERT TO GRAYSCALE ----
+// ---- GRAYSCALE ----
 
 function toGrayscale(data, w, h) {
   const gray = new Float32Array(w * h);
@@ -47,34 +42,32 @@ function toGrayscale(data, w, h) {
   return gray;
 }
 
-// ---- SEPARABLE BOX BLUR ----
-// 3 passes of box blur ≈ Gaussian blur. Separable = O(n) regardless
-// of radius. A 40px blur costs the same as a 3px blur.
+// ---- SEPARABLE BOX BLUR (O(n) regardless of radius) ----
 
 function boxBlurH(src, dst, w, h, r) {
-  const diameter = r + r + 1;
-  const invD = 1.0 / diameter;
+  const d = r + r + 1;
+  const inv = 1.0 / d;
   for (let y = 0; y < h; y++) {
     const row = y * w;
     let acc = src[row] * (r + 1);
     for (let x = 0; x < r; x++) acc += src[row + x];
     for (let x = 0; x < w; x++) {
       acc += src[row + Math.min(x + r, w - 1)];
-      dst[row + x] = acc * invD;
+      dst[row + x] = acc * inv;
       acc -= src[row + Math.max(x - r, 0)];
     }
   }
 }
 
 function boxBlurV(src, dst, w, h, r) {
-  const diameter = r + r + 1;
-  const invD = 1.0 / diameter;
+  const d = r + r + 1;
+  const inv = 1.0 / d;
   for (let x = 0; x < w; x++) {
     let acc = src[x] * (r + 1);
     for (let y = 0; y < r; y++) acc += src[y * w + x];
     for (let y = 0; y < h; y++) {
       acc += src[Math.min(y + r, h - 1) * w + x];
-      dst[y * w + x] = acc * invD;
+      dst[y * w + x] = acc * inv;
       acc -= src[Math.max(y - r, 0) * w + x];
     }
   }
@@ -82,68 +75,152 @@ function boxBlurV(src, dst, w, h, r) {
 
 function gaussianApproxBlur(data, w, h, radius) {
   const temp = new Float32Array(w * h);
-  // 3 passes of box blur approximates a Gaussian
   for (let pass = 0; pass < 3; pass++) {
     boxBlurH(data, temp, w, h, radius);
     boxBlurV(temp, data, w, h, radius);
   }
 }
 
-// ---- MAX FILTER (1D horizontal + vertical for speed) ----
-// Used for morphological background estimation
+// ---- SLIDING WINDOW MAX FILTER (O(n) using monotonic deque) ----
+// This is the key optimization. Old version was O(n * radius).
+// This version is O(n) regardless of radius using a deque that
+// tracks the max in the current window.
 
 function maxFilterH(src, dst, w, h, r) {
+  const deque = new Int32Array(w); // indices
   for (let y = 0; y < h; y++) {
     const row = y * w;
+    let head = 0;
+    let tail = 0;
+
     for (let x = 0; x < w; x++) {
-      let mx = 0;
-      const x0 = Math.max(0, x - r);
-      const x1 = Math.min(w - 1, x + r);
-      for (let xx = x0; xx <= x1; xx++) {
-        if (src[row + xx] > mx) mx = src[row + xx];
+      // Remove elements outside window
+      while (head < tail && deque[head] < x - r) head++;
+      // Remove smaller elements from back
+      while (head < tail && src[row + deque[tail - 1]] <= src[row + x]) tail--;
+      deque[tail++] = x;
+      // Only write once window is centered (or from start)
+      if (x >= r) {
+        dst[row + x - r] = src[row + deque[head]];
       }
-      dst[row + x] = mx;
+    }
+    // Flush remaining
+    for (let x = Math.max(0, w - r); x < w; x++) {
+      while (head < tail && deque[head] < x - r) head++;
+      dst[row + x] = src[row + deque[head]];
+    }
+  }
+  // Fix: simpler correct version
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    head = 0;
+    tail = 0;
+    for (let x = 0; x < w; x++) {
+      while (head < tail && deque[head] <= x - r - 1) head++;
+      while (head < tail && src[row + deque[tail - 1]] <= src[row + x]) tail--;
+      deque[tail++] = x;
+      const outX = x;
+      const winStart = Math.max(0, outX - r);
+      while (head < tail && deque[head] < winStart) head++;
+      dst[row + outX] = src[row + deque[head]];
     }
   }
 }
 
 function maxFilterV(src, dst, w, h, r) {
+  const deque = new Int32Array(h);
   for (let x = 0; x < w; x++) {
+    let head = 0;
+    let tail = 0;
     for (let y = 0; y < h; y++) {
-      let mx = 0;
-      const y0 = Math.max(0, y - r);
-      const y1 = Math.min(h - 1, y + r);
-      for (let yy = y0; yy <= y1; yy++) {
-        if (src[yy * w + x] > mx) mx = src[yy * w + x];
-      }
-      dst[y * w + x] = mx;
+      const winStart = Math.max(0, y - r);
+      while (head < tail && deque[head] < winStart) head++;
+      while (head < tail && src[deque[tail - 1] * w + x] <= src[y * w + x]) tail--;
+      deque[tail++] = y;
+      dst[y * w + x] = src[deque[head] * w + x];
     }
   }
 }
 
-// ---- MORPHOLOGICAL BACKGROUND ESTIMATION ----
-// Dilate (max filter) then smooth. Produces a clean background
-// without block artifacts.
+// ---- DOWNSCALE + UPSCALE (process at half res for large images) ----
+
+function downscale2x(gray, w, h) {
+  const nw = Math.ceil(w / 2);
+  const nh = Math.ceil(h / 2);
+  const out = new Float32Array(nw * nh);
+  for (let y = 0; y < nh; y++) {
+    for (let x = 0; x < nw; x++) {
+      const sx = Math.min(x * 2, w - 1);
+      const sy = Math.min(y * 2, h - 1);
+      out[y * nw + x] = gray[sy * w + sx];
+    }
+  }
+  return { data: out, width: nw, height: nh };
+}
+
+function upscaleBilinear(small, sw, sh, tw, th) {
+  const out = new Float32Array(tw * th);
+  const xRatio = sw / tw;
+  const yRatio = sh / th;
+  for (let y = 0; y < th; y++) {
+    const sy = y * yRatio;
+    const y0 = Math.min(Math.floor(sy), sh - 1);
+    const y1 = Math.min(y0 + 1, sh - 1);
+    const fy = sy - y0;
+    for (let x = 0; x < tw; x++) {
+      const sx = x * xRatio;
+      const x0 = Math.min(Math.floor(sx), sw - 1);
+      const x1 = Math.min(x0 + 1, sw - 1);
+      const fx = sx - x0;
+      out[y * tw + x] =
+        small[y0 * sw + x0] * (1 - fx) * (1 - fy) +
+        small[y0 * sw + x1] * fx * (1 - fy) +
+        small[y1 * sw + x0] * (1 - fx) * fy +
+        small[y1 * sw + x1] * fx * fy;
+    }
+  }
+  return out;
+}
+
+// ---- MORPHOLOGICAL BACKGROUND ESTIMATION (optimized) ----
+// For large images: downscale → max filter → blur → upscale
+// The background is smooth so downscaling loses almost nothing.
 
 function estimateBackground(gray, w, h) {
-  const radius = Math.max(20, Math.floor(Math.min(w, h) / 20));
-  const blurRadius = Math.max(10, Math.floor(radius / 2));
+  const pixels = w * h;
+  const LARGE_THRESHOLD = 1500 * 1500;
+
+  if (pixels > LARGE_THRESHOLD) {
+    // Process at half resolution
+    const { data: small, width: sw, height: sh } = downscale2x(gray, w, h);
+    const radius = Math.max(10, Math.floor(Math.min(sw, sh) / 20));
+    const blurRadius = Math.max(5, Math.floor(radius / 2));
+
+    const temp = new Float32Array(sw * sh);
+    const bg = new Float32Array(sw * sh);
+
+    maxFilterH(small, temp, sw, sh, radius);
+    maxFilterV(temp, bg, sw, sh, radius);
+    gaussianApproxBlur(bg, sw, sh, blurRadius);
+
+    return upscaleBilinear(bg, sw, sh, w, h);
+  }
+
+  // Full resolution for smaller images
+  const radius = Math.max(10, Math.floor(Math.min(w, h) / 25));
+  const blurRadius = Math.max(5, Math.floor(radius / 2));
 
   const temp = new Float32Array(w * h);
   const background = new Float32Array(w * h);
 
-  // Separable max filter (dilation)
   maxFilterH(gray, temp, w, h, radius);
   maxFilterV(temp, background, w, h, radius);
-
-  // Smooth the dilated result to remove blockiness
   gaussianApproxBlur(background, w, h, blurRadius);
 
   return background;
 }
 
 // ---- REMOVE SHADOWS ----
-// Divide each pixel by the estimated background to normalize illumination.
 
 function removeShadows(gray, w, h) {
   const background = estimateBackground(gray, w, h);
@@ -155,9 +232,7 @@ function removeShadows(gray, w, h) {
   return result;
 }
 
-// ---- SAUVOLA BINARIZATION ----
-// T(x,y) = mean * (1 + k * (stddev / R - 1))
-// Uses integral images so cost is O(n) regardless of window size.
+// ---- SAUVOLA BINARIZATION (integral images = O(n)) ----
 
 function sauvolaBinarize(gray, w, h, k = 0.2, R = 128) {
   const { sum, sqSum } = buildIntegralImages(gray, w, h);
@@ -166,11 +241,11 @@ function sauvolaBinarize(gray, w, h, k = 0.2, R = 128) {
   const result = new Uint8Array(w * h);
 
   for (let y = 0; y < h; y++) {
+    const y1 = Math.max(0, y - halfW);
+    const y2 = Math.min(h - 1, y + halfW);
     for (let x = 0; x < w; x++) {
       const x1 = Math.max(0, x - halfW);
-      const y1 = Math.max(0, y - halfW);
       const x2 = Math.min(w - 1, x + halfW);
-      const y2 = Math.min(h - 1, y + halfW);
       const count = (x2 - x1 + 1) * (y2 - y1 + 1);
 
       const s = integralQuery(sum, w, x1, y1, x2, y2);
@@ -187,20 +262,17 @@ function sauvolaBinarize(gray, w, h, k = 0.2, R = 128) {
   return result;
 }
 
-// ---- CLAHE (Contrast Limited Adaptive Histogram Equalization) ----
-// Splits image into tiles, equalizes each tile's histogram with
-// a clip limit, then bilinear-interpolates between tiles.
+// ---- CLAHE (optimized with typed arrays) ----
 
 function clahe(gray, w, h, tilesX = 8, tilesY = 8, clipLimit = 2.0) {
   const tileW = Math.ceil(w / tilesX);
   const tileH = Math.ceil(h / tilesY);
-  const result = new Float32Array(w * h);
   const bins = 256;
-  const maps = []; // tilesY x tilesX lookup tables
 
-  // Build per-tile equalization maps
+  // Build lookup tables for each tile
+  const luts = new Float32Array(tilesY * tilesX * bins);
+
   for (let ty = 0; ty < tilesY; ty++) {
-    maps[ty] = [];
     for (let tx = 0; tx < tilesX; tx++) {
       const x0 = tx * tileW;
       const y0 = ty * tileH;
@@ -208,68 +280,57 @@ function clahe(gray, w, h, tilesX = 8, tilesY = 8, clipLimit = 2.0) {
       const y1 = Math.min(y0 + tileH, h);
       const area = (x1 - x0) * (y1 - y0);
 
-      // Histogram
       const hist = new Float32Array(bins);
       for (let y = y0; y < y1; y++) {
         for (let x = x0; x < x1; x++) {
-          hist[Math.min(255, Math.max(0, Math.floor(gray[y * w + x])))]++;
+          hist[Math.min(255, Math.max(0, gray[y * w + x] | 0))]++;
         }
       }
 
-      // Clip histogram
       const limit = Math.max(1, (clipLimit * area) / bins);
       let excess = 0;
       for (let i = 0; i < bins; i++) {
-        if (hist[i] > limit) {
-          excess += hist[i] - limit;
-          hist[i] = limit;
-        }
+        if (hist[i] > limit) { excess += hist[i] - limit; hist[i] = limit; }
       }
       const perBin = excess / bins;
-      for (let i = 0; i < bins; i++) hist[i] += perBin;
 
-      // CDF → lookup table
-      const lut = new Float32Array(bins);
+      const offset = (ty * tilesX + tx) * bins;
       let cumSum = 0;
       for (let i = 0; i < bins; i++) {
-        cumSum += hist[i];
-        lut[i] = (cumSum / area) * 255;
+        cumSum += hist[i] + perBin;
+        luts[offset + i] = (cumSum / area) * 255;
       }
-      maps[ty][tx] = lut;
     }
   }
 
-  // Bilinear interpolation between tiles
+  // Interpolate
+  const result = new Float32Array(w * h);
   for (let y = 0; y < h; y++) {
+    const fy = (y / tileH) - 0.5;
+    const ty0 = Math.max(0, fy | 0);
+    const ty1 = Math.min(tilesY - 1, ty0 + 1);
+    const yAlpha = Math.max(0, Math.min(1, fy - ty0));
+
     for (let x = 0; x < w; x++) {
-      const val = Math.min(255, Math.max(0, Math.floor(gray[y * w + x])));
-
-      // Which tile center is this pixel near?
+      const val = Math.min(255, Math.max(0, gray[y * w + x] | 0));
       const fx = (x / tileW) - 0.5;
-      const fy = (y / tileH) - 0.5;
-      const tx0 = Math.max(0, Math.floor(fx));
-      const ty0 = Math.max(0, Math.floor(fy));
+      const tx0 = Math.max(0, fx | 0);
       const tx1 = Math.min(tilesX - 1, tx0 + 1);
-      const ty1 = Math.min(tilesY - 1, ty0 + 1);
-
       const xAlpha = Math.max(0, Math.min(1, fx - tx0));
-      const yAlpha = Math.max(0, Math.min(1, fy - ty0));
 
-      const tl = maps[ty0][tx0][val];
-      const tr = maps[ty0][tx1][val];
-      const bl = maps[ty1][tx0][val];
-      const br = maps[ty1][tx1][val];
+      const tl = luts[(ty0 * tilesX + tx0) * bins + val];
+      const tr = luts[(ty0 * tilesX + tx1) * bins + val];
+      const bl = luts[(ty1 * tilesX + tx0) * bins + val];
+      const br = luts[(ty1 * tilesX + tx1) * bins + val];
 
-      const top = tl + (tr - tl) * xAlpha;
-      const bot = bl + (br - bl) * xAlpha;
-      result[y * w + x] = top + (bot - top) * yAlpha;
+      result[y * w + x] = tl + (tr - tl) * xAlpha + ((bl + (br - bl) * xAlpha) - (tl + (tr - tl) * xAlpha)) * yAlpha;
     }
   }
 
   return result;
 }
 
-// ---- UNSHARP MASK (proper version) ----
+// ---- UNSHARP MASK ----
 
 function unsharpMask(gray, w, h, amount = 1.0, radius = 3) {
   const blurred = new Float32Array(gray);
@@ -281,29 +342,17 @@ function unsharpMask(gray, w, h, amount = 1.0, radius = 3) {
   return result;
 }
 
-// ---- PIPELINE: write grayscale result back to RGBA ----
+// ---- BLEND ----
 
-function grayToRGBA(gray, data) {
-  for (let i = 0; i < gray.length; i++) {
-    const v = Math.min(255, Math.max(0, Math.round(gray[i])));
-    const j = i * 4;
-    data[j] = v;
-    data[j + 1] = v;
-    data[j + 2] = v;
-    // alpha untouched
-  }
-}
-
-// Blend original RGBA with processed grayscale at given intensity
 function blendWithOriginal(original, processed, w, h, intensity) {
   const t = intensity / 100;
   const result = new Uint8ClampedArray(original.length);
   for (let i = 0; i < w * h; i++) {
     const j = i * 4;
-    const v = Math.round(processed[i]);
-    result[j] = original[j] * (1 - t) + v * t;
-    result[j + 1] = original[j + 1] * (1 - t) + v * t;
-    result[j + 2] = original[j + 2] * (1 - t) + v * t;
+    const v = processed[i];
+    result[j] = original[j] + (v - original[j]) * t;
+    result[j + 1] = original[j + 1] + (v - original[j + 1]) * t;
+    result[j + 2] = original[j + 2] + (v - original[j + 2]) * t;
     result[j + 3] = original[j + 3];
   }
   return result;
@@ -316,12 +365,10 @@ function blendWithOriginal(original, processed, w, h, intensity) {
 function processEnhancement(data, w, h, mode, intensity) {
   const original = new Uint8ClampedArray(data);
   const gray = toGrayscale(data, w, h);
-
   let processed;
 
   switch (mode) {
     case 'auto': {
-      // Shadow removal → Sauvola binarization
       const cleaned = removeShadows(gray, w, h);
       const binary = sauvolaBinarize(cleaned, w, h, 0.18, 128);
       processed = new Float32Array(binary.length);
@@ -329,7 +376,6 @@ function processEnhancement(data, w, h, mode, intensity) {
       break;
     }
     case 'scan': {
-      // Aggressive: clean shadows → tight Sauvola
       const cleaned = removeShadows(gray, w, h);
       const binary = sauvolaBinarize(cleaned, w, h, 0.12, 128);
       processed = new Float32Array(binary.length);
@@ -337,27 +383,24 @@ function processEnhancement(data, w, h, mode, intensity) {
       break;
     }
     case 'lighten': {
-      // Shadow removal → CLAHE (stays in grayscale, not B&W)
       const cleaned = removeShadows(gray, w, h);
       processed = clahe(cleaned, w, h, 8, 8, 2.0);
       break;
     }
     case 'sharpen': {
-      // CLAHE → unsharp mask
       const enhanced = clahe(gray, w, h, 8, 8, 2.5);
       processed = unsharpMask(enhanced, w, h, 1.5, 4);
       break;
     }
-    default: {
+    default:
       processed = gray;
-    }
   }
 
   return blendWithOriginal(original, processed, w, h, intensity);
 }
 
 // ============================================================
-// PERSPECTIVE TRANSFORM (unchanged logic, just cleaner code)
+// PERSPECTIVE TRANSFORM
 // ============================================================
 
 function solveLinearSystem(A, b) {
@@ -385,26 +428,18 @@ function solveLinearSystem(A, b) {
 }
 
 function computePerspectiveTransform(srcPts, dstPts) {
-  const A = [];
-  const b = [];
+  const A = [], b = [];
   for (let i = 0; i < 4; i++) {
-    const s = srcPts[i];
-    const d = dstPts[i];
+    const s = srcPts[i], d = dstPts[i];
     A.push([s.x, s.y, 1, 0, 0, 0, -d.x * s.x, -d.x * s.y]);
     A.push([0, 0, 0, s.x, s.y, 1, -d.y * s.x, -d.y * s.y]);
-    b.push(d.x);
-    b.push(d.y);
+    b.push(d.x); b.push(d.y);
   }
   return solveLinearSystem(A, b);
 }
 
 function applyPerspectiveTransform(sourceData, sw, sh, srcPts, ow, oh) {
-  const dstPts = [
-    { x: 0, y: 0 },
-    { x: ow, y: 0 },
-    { x: ow, y: oh },
-    { x: 0, y: oh },
-  ];
+  const dstPts = [{ x: 0, y: 0 }, { x: ow, y: 0 }, { x: ow, y: oh }, { x: 0, y: oh }];
   const H = computePerspectiveTransform(dstPts, srcPts);
   if (!H) return null;
 
@@ -415,22 +450,16 @@ function applyPerspectiveTransform(sourceData, sw, sh, srcPts, ow, oh) {
       if (Math.abs(denom) < 1e-10) continue;
       const srcX = (H[0] * x + H[1] * y + H[2]) / denom;
       const srcY = (H[3] * x + H[4] * y + H[5]) / denom;
-      const x0 = Math.floor(srcX);
-      const y0 = Math.floor(srcY);
+      const x0 = srcX | 0, y0 = srcY | 0;
 
       if (x0 >= 0 && x0 + 1 < sw && y0 >= 0 && y0 + 1 < sh) {
-        const fx = srcX - x0;
-        const fy = srcY - y0;
+        const fx = srcX - x0, fy = srcY - y0;
         for (let c = 0; c < 4; c++) {
           const v00 = sourceData[(y0 * sw + x0) * 4 + c];
           const v10 = sourceData[(y0 * sw + x0 + 1) * 4 + c];
           const v01 = sourceData[((y0 + 1) * sw + x0) * 4 + c];
           const v11 = sourceData[((y0 + 1) * sw + x0 + 1) * 4 + c];
-          dest[(y * ow + x) * 4 + c] =
-            v00 * (1 - fx) * (1 - fy) +
-            v10 * fx * (1 - fy) +
-            v01 * (1 - fx) * fy +
-            v11 * fx * fy;
+          dest[(y * ow + x) * 4 + c] = v00 * (1 - fx) * (1 - fy) + v10 * fx * (1 - fy) + v01 * (1 - fx) * fy + v11 * fx * fy;
         }
       } else {
         const idx = (y * ow + x) * 4;
@@ -449,39 +478,14 @@ self.onmessage = function (e) {
   const { type, id, data } = e.data;
   try {
     if (type === 'enhance') {
-      const result = processEnhancement(
-        data.imageData,
-        data.width,
-        data.height,
-        data.mode,
-        data.intensity,
-      );
-      self.postMessage(
-        { id, success: true, result, width: data.width, height: data.height },
-      );
+      const result = processEnhancement(data.imageData, data.width, data.height, data.mode, data.intensity);
+      self.postMessage({ id, success: true, result, width: data.width, height: data.height });
     } else if (type === 'transform') {
-      const result = applyPerspectiveTransform(
-        data.sourceData,
-        data.sourceWidth,
-        data.sourceHeight,
-        data.srcPoints,
-        data.outputWidth,
-        data.outputHeight,
-      );
+      const result = applyPerspectiveTransform(data.sourceData, data.sourceWidth, data.sourceHeight, data.srcPoints, data.outputWidth, data.outputHeight);
       if (result) {
-        self.postMessage({
-          id,
-          success: true,
-          result,
-          width: data.outputWidth,
-          height: data.outputHeight,
-        });
+        self.postMessage({ id, success: true, result, width: data.outputWidth, height: data.outputHeight });
       } else {
-        self.postMessage({
-          id,
-          success: false,
-          error: 'Transform failed — invalid polygon',
-        });
+        self.postMessage({ id, success: false, error: 'Transform failed — invalid polygon' });
       }
     }
   } catch (err) {
