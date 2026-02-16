@@ -82,47 +82,19 @@ function gaussianApproxBlur(data, w, h, radius) {
 }
 
 // ---- SLIDING WINDOW MAX FILTER (O(n) using monotonic deque) ----
-// This is the key optimization. Old version was O(n * radius).
-// This version is O(n) regardless of radius using a deque that
-// tracks the max in the current window.
 
 function maxFilterH(src, dst, w, h, r) {
-  const deque = new Int32Array(w); // indices
+  const deque = new Int32Array(w);
   for (let y = 0; y < h; y++) {
     const row = y * w;
     let head = 0;
     let tail = 0;
-
     for (let x = 0; x < w; x++) {
-      // Remove elements outside window
-      while (head < tail && deque[head] < x - r) head++;
-      // Remove smaller elements from back
-      while (head < tail && src[row + deque[tail - 1]] <= src[row + x]) tail--;
-      deque[tail++] = x;
-      // Only write once window is centered (or from start)
-      if (x >= r) {
-        dst[row + x - r] = src[row + deque[head]];
-      }
-    }
-    // Flush remaining
-    for (let x = Math.max(0, w - r); x < w; x++) {
-      while (head < tail && deque[head] < x - r) head++;
-      dst[row + x] = src[row + deque[head]];
-    }
-  }
-  // Fix: simpler correct version
-  for (let y = 0; y < h; y++) {
-    const row = y * w;
-    head = 0;
-    tail = 0;
-    for (let x = 0; x < w; x++) {
-      while (head < tail && deque[head] <= x - r - 1) head++;
-      while (head < tail && src[row + deque[tail - 1]] <= src[row + x]) tail--;
-      deque[tail++] = x;
-      const outX = x;
-      const winStart = Math.max(0, outX - r);
+      const winStart = Math.max(0, x - r);
       while (head < tail && deque[head] < winStart) head++;
-      dst[row + outX] = src[row + deque[head]];
+      while (head < tail && src[row + deque[tail - 1]] <= src[row + x]) tail--;
+      deque[tail++] = x;
+      dst[row + x] = src[row + deque[head]];
     }
   }
 }
@@ -142,7 +114,7 @@ function maxFilterV(src, dst, w, h, r) {
   }
 }
 
-// ---- DOWNSCALE + UPSCALE (process at half res for large images) ----
+// ---- DOWNSCALE + UPSCALE ----
 
 function downscale2x(gray, w, h) {
   const nw = Math.ceil(w / 2);
@@ -182,16 +154,13 @@ function upscaleBilinear(small, sw, sh, tw, th) {
   return out;
 }
 
-// ---- MORPHOLOGICAL BACKGROUND ESTIMATION (optimized) ----
-// For large images: downscale → max filter → blur → upscale
-// The background is smooth so downscaling loses almost nothing.
+// ---- MORPHOLOGICAL BACKGROUND ESTIMATION ----
 
 function estimateBackground(gray, w, h) {
   const pixels = w * h;
   const LARGE_THRESHOLD = 1500 * 1500;
 
   if (pixels > LARGE_THRESHOLD) {
-    // Process at half resolution
     const { data: small, width: sw, height: sh } = downscale2x(gray, w, h);
     const radius = Math.max(10, Math.floor(Math.min(sw, sh) / 20));
     const blurRadius = Math.max(5, Math.floor(radius / 2));
@@ -206,7 +175,6 @@ function estimateBackground(gray, w, h) {
     return upscaleBilinear(bg, sw, sh, w, h);
   }
 
-  // Full resolution for smaller images
   const radius = Math.max(10, Math.floor(Math.min(w, h) / 25));
   const blurRadius = Math.max(5, Math.floor(radius / 2));
 
@@ -232,7 +200,7 @@ function removeShadows(gray, w, h) {
   return result;
 }
 
-// ---- SAUVOLA BINARIZATION (integral images = O(n)) ----
+// ---- SAUVOLA BINARIZATION ----
 
 function sauvolaBinarize(gray, w, h, k = 0.2, R = 128) {
   const { sum, sqSum } = buildIntegralImages(gray, w, h);
@@ -262,14 +230,13 @@ function sauvolaBinarize(gray, w, h, k = 0.2, R = 128) {
   return result;
 }
 
-// ---- CLAHE (optimized with typed arrays) ----
+// ---- CLAHE ----
 
 function clahe(gray, w, h, tilesX = 8, tilesY = 8, clipLimit = 2.0) {
   const tileW = Math.ceil(w / tilesX);
   const tileH = Math.ceil(h / tilesY);
   const bins = 256;
 
-  // Build lookup tables for each tile
   const luts = new Float32Array(tilesY * tilesX * bins);
 
   for (let ty = 0; ty < tilesY; ty++) {
@@ -290,7 +257,10 @@ function clahe(gray, w, h, tilesX = 8, tilesY = 8, clipLimit = 2.0) {
       const limit = Math.max(1, (clipLimit * area) / bins);
       let excess = 0;
       for (let i = 0; i < bins; i++) {
-        if (hist[i] > limit) { excess += hist[i] - limit; hist[i] = limit; }
+        if (hist[i] > limit) {
+          excess += hist[i] - limit;
+          hist[i] = limit;
+        }
       }
       const perBin = excess / bins;
 
@@ -303,7 +273,6 @@ function clahe(gray, w, h, tilesX = 8, tilesY = 8, clipLimit = 2.0) {
     }
   }
 
-  // Interpolate
   const result = new Float32Array(w * h);
   for (let y = 0; y < h; y++) {
     const fy = (y / tileH) - 0.5;
@@ -323,7 +292,9 @@ function clahe(gray, w, h, tilesX = 8, tilesY = 8, clipLimit = 2.0) {
       const bl = luts[(ty1 * tilesX + tx0) * bins + val];
       const br = luts[(ty1 * tilesX + tx1) * bins + val];
 
-      result[y * w + x] = tl + (tr - tl) * xAlpha + ((bl + (br - bl) * xAlpha) - (tl + (tr - tl) * xAlpha)) * yAlpha;
+      const top = tl + (tr - tl) * xAlpha;
+      const bot = bl + (br - bl) * xAlpha;
+      result[y * w + x] = top + (bot - top) * yAlpha;
     }
   }
 
@@ -433,7 +404,8 @@ function computePerspectiveTransform(srcPts, dstPts) {
     const s = srcPts[i], d = dstPts[i];
     A.push([s.x, s.y, 1, 0, 0, 0, -d.x * s.x, -d.x * s.y]);
     A.push([0, 0, 0, s.x, s.y, 1, -d.y * s.x, -d.y * s.y]);
-    b.push(d.x); b.push(d.y);
+    b.push(d.x);
+    b.push(d.y);
   }
   return solveLinearSystem(A, b);
 }
@@ -459,7 +431,11 @@ function applyPerspectiveTransform(sourceData, sw, sh, srcPts, ow, oh) {
           const v10 = sourceData[(y0 * sw + x0 + 1) * 4 + c];
           const v01 = sourceData[((y0 + 1) * sw + x0) * 4 + c];
           const v11 = sourceData[((y0 + 1) * sw + x0 + 1) * 4 + c];
-          dest[(y * ow + x) * 4 + c] = v00 * (1 - fx) * (1 - fy) + v10 * fx * (1 - fy) + v01 * (1 - fx) * fy + v11 * fx * fy;
+          dest[(y * ow + x) * 4 + c] =
+            v00 * (1 - fx) * (1 - fy) +
+            v10 * fx * (1 - fy) +
+            v01 * (1 - fx) * fy +
+            v11 * fx * fy;
         }
       } else {
         const idx = (y * ow + x) * 4;
@@ -478,10 +454,15 @@ self.onmessage = function (e) {
   const { type, id, data } = e.data;
   try {
     if (type === 'enhance') {
-      const result = processEnhancement(data.imageData, data.width, data.height, data.mode, data.intensity);
+      const result = processEnhancement(
+        data.imageData, data.width, data.height, data.mode, data.intensity,
+      );
       self.postMessage({ id, success: true, result, width: data.width, height: data.height });
     } else if (type === 'transform') {
-      const result = applyPerspectiveTransform(data.sourceData, data.sourceWidth, data.sourceHeight, data.srcPoints, data.outputWidth, data.outputHeight);
+      const result = applyPerspectiveTransform(
+        data.sourceData, data.sourceWidth, data.sourceHeight,
+        data.srcPoints, data.outputWidth, data.outputHeight,
+      );
       if (result) {
         self.postMessage({ id, success: true, result, width: data.outputWidth, height: data.outputHeight });
       } else {
