@@ -28,7 +28,9 @@ export function DocumentViewer({ canvasRef, containerRef, viewerRef, fileInputRe
       canvas.width = activePage.width;
       canvas.height = activePage.height;
       ctx.drawImage(img, 0, 0);
+      canvas.dataset.ready = 'true';
     };
+    canvas.dataset.ready = 'false';
     img.src = activePage.src;
   }, [activePage?.src]);
 
@@ -112,8 +114,12 @@ export function DocumentViewer({ canvasRef, containerRef, viewerRef, fileInputRe
             <ImageIcon className="w-8 h-8 text-muted-foreground" />
           </div>
           <h3 className="text-lg font-semibold">No Document Selected</h3>
-          <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto">Upload a PDF or Image to start editing, enhancing, and exporting.</p>
-          <Button className="mt-4" onClick={() => fileInputRef.current?.click()}>Upload File</Button>
+          <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto">
+            Upload a PDF or Image to start editing, enhancing, and exporting.
+          </p>
+          <Button className="mt-4" onClick={() => fileInputRef.current?.click()}>
+            Upload File
+          </Button>
           <p className="text-xs text-muted-foreground mt-2">Max 50MB per file · PDF limit: 100 pages</p>
         </div>
       </main>
@@ -122,7 +128,10 @@ export function DocumentViewer({ canvasRef, containerRef, viewerRef, fileInputRe
 
   return (
     <main ref={containerRef} id="main-content" className="flex-1 bg-muted/10 bg-dot-pattern overflow-auto">
-      <div className="min-w-full min-h-full flex items-center justify-center p-8" style={{ minWidth: displayW + 64, minHeight: displayH + 64 }}>
+      <div
+        className="min-w-full min-h-full flex items-center justify-center p-8"
+        style={{ minWidth: displayW + 64, minHeight: displayH + 64 }}
+      >
         <div
           ref={viewerRef}
           className="relative shadow-xl bg-white flex-shrink-0"
@@ -134,7 +143,10 @@ export function DocumentViewer({ canvasRef, containerRef, viewerRef, fileInputRe
         >
           <canvas
             ref={canvasRef}
-            className={cn('w-full h-full block', activeTool === 'paint' && !cropMode ? 'cursor-crosshair' : 'cursor-default')}
+            className={cn(
+              'w-full h-full block',
+              activeTool === 'paint' && !cropMode ? 'cursor-crosshair' : 'cursor-default',
+            )}
           />
           {isProcessing && (
             <div className="absolute inset-0 bg-white/50 backdrop-blur-[2px] flex items-center justify-center z-30">
