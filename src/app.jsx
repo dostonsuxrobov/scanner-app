@@ -39,7 +39,10 @@ export default function App() {
   // Beforeunload warning
   useEffect(() => {
     const handler = (e) => {
-      if (pages.length > 0) { e.preventDefault(); e.returnValue = ''; }
+      if (pages.length > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
     };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
@@ -60,21 +63,47 @@ export default function App() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // Wait for canvas to finish drawing before reading pixels
+  const waitForCanvas = useCallback(() => {
+    return new Promise((resolve) => {
+      const check = () => {
+        if (canvasRef.current?.dataset.ready === 'true') {
+          resolve();
+        } else {
+          requestAnimationFrame(check);
+        }
+      };
+      check();
+    });
+  }, []);
+
   // Enhance current page
   const handleApply = useCallback(async () => {
-    const { activePage: ap, enhanceMode, enhanceIntensity } = { activePage: store.getState().activePage(), ...store.getState() };
-    if (!ap) return;
+    const page = store.getState().activePage();
+    const { enhanceMode, enhanceIntensity } = store.getState();
+    if (!page) return;
+
     store.getState().setProcessing(true, 'Enhancing document...');
     try {
+      await waitForCanvas();
+
       const canvas = canvasRef.current;
       const ctx = canvas.getContext('2d');
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
       const result = await getWorker().process('enhance', {
-        imageData: imageData.data, width: canvas.width, height: canvas.height,
-        mode: enhanceMode, intensity: enhanceIntensity,
+        imageData: imageData.data,
+        width: canvas.width,
+        height: canvas.height,
+        mode: enhanceMode,
+        intensity: enhanceIntensity,
       });
-      ctx.putImageData(new ImageData(new Uint8ClampedArray(result.data), result.width, result.height), 0, 0);
-      store.getState().updatePage(ap.id, { src: canvas.toDataURL('image/png') });
+
+      ctx.putImageData(
+        new ImageData(new Uint8ClampedArray(result.data), result.width, result.height),
+        0, 0,
+      );
+      store.getState().updatePage(page.id, { src: canvas.toDataURL('image/png') });
       showToast('Enhancement applied');
     } catch (err) {
       showToast(`Enhancement failed: ${err.message}`, true);
@@ -92,22 +121,33 @@ export default function App() {
       for (let i = 0; i < allPages.length; i++) {
         store.getState().setProcessing(true, `Enhancing page ${i + 1}/${allPages.length}...`);
         const page = allPages[i];
+
         const img = await new Promise((res, rej) => {
           const image = new Image();
           image.onload = () => res(image);
           image.onerror = rej;
           image.src = page.src;
         });
+
         const tc = document.createElement('canvas');
-        tc.width = page.width; tc.height = page.height;
+        tc.width = page.width;
+        tc.height = page.height;
         const ctx = tc.getContext('2d');
         ctx.drawImage(img, 0, 0);
         const imageData = ctx.getImageData(0, 0, tc.width, tc.height);
+
         const result = await getWorker().process('enhance', {
-          imageData: imageData.data, width: tc.width, height: tc.height,
-          mode: enhanceMode, intensity: enhanceIntensity,
+          imageData: imageData.data,
+          width: tc.width,
+          height: tc.height,
+          mode: enhanceMode,
+          intensity: enhanceIntensity,
         });
-        ctx.putImageData(new ImageData(new Uint8ClampedArray(result.data), result.width, result.height), 0, 0);
+
+        ctx.putImageData(
+          new ImageData(new Uint8ClampedArray(result.data), result.width, result.height),
+          0, 0,
+        );
         store.getState().updatePage(page.id, { src: tc.toDataURL('image/png') });
       }
       showToast(`Enhanced ${allPages.length} page(s)`);
@@ -118,6 +158,7 @@ export default function App() {
     }
   }, []);
 
+  // Reset to original
   const handleReset = useCallback(() => {
     const page = store.getState().activePage();
     if (!page) return;
@@ -139,7 +180,11 @@ export default function App() {
       ctx.translate(canvas.width / 2, canvas.height / 2);
       ctx.rotate((direction * 90 * Math.PI) / 180);
       ctx.drawImage(img, -page.width / 2, -page.height / 2);
-      store.getState().updatePage(page.id, { src: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height });
+      store.getState().updatePage(page.id, {
+        src: canvas.toDataURL('image/png'),
+        width: canvas.width,
+        height: canvas.height,
+      });
     };
     img.src = page.src;
   }, []);
@@ -150,10 +195,15 @@ export default function App() {
     const page = s.activePage();
     const cropPoints = s.cropPoints;
     if (!cropPoints || !page || !viewerRef.current) return;
-    if (!isValidPolygon(cropPoints)) { showToast('Invalid crop shape', true); return; }
+    if (!isValidPolygon(cropPoints)) {
+      showToast('Invalid crop shape', true);
+      return;
+    }
 
     store.getState().setProcessing(true, 'Applying perspective crop...');
     try {
+      await waitForCanvas();
+
       const canvas = canvasRef.current;
       const rect = viewerRef.current.getBoundingClientRect();
       const sx = canvas.width / rect.width;
@@ -167,22 +217,40 @@ export default function App() {
       const ow = Math.round(Math.max(w1, w2));
       const oh = Math.round(Math.max(h1, h2));
 
-      if (ow < 10 || oh < 10) { showToast('Crop area too small', true); return; }
-      if (ow > 10000 || oh > 10000) { showToast('Crop area too large', true); return; }
+      if (ow < 10 || oh < 10) {
+        showToast('Crop area too small', true);
+        return;
+      }
+      if (ow > 10000 || oh > 10000) {
+        showToast('Crop area too large', true);
+        return;
+      }
 
       const ctx = canvas.getContext('2d');
       const sourceData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
       const result = await getWorker().process('transform', {
-        sourceData: sourceData.data, sourceWidth: canvas.width, sourceHeight: canvas.height,
-        srcPoints: scaled, outputWidth: ow, outputHeight: oh,
+        sourceData: sourceData.data,
+        sourceWidth: canvas.width,
+        sourceHeight: canvas.height,
+        srcPoints: scaled,
+        outputWidth: ow,
+        outputHeight: oh,
       });
 
       const rc = document.createElement('canvas');
-      rc.width = result.width; rc.height = result.height;
-      rc.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(result.data), result.width, result.height), 0, 0);
+      rc.width = result.width;
+      rc.height = result.height;
+      rc.getContext('2d').putImageData(
+        new ImageData(new Uint8ClampedArray(result.data), result.width, result.height),
+        0, 0,
+      );
 
-      store.getState().updatePage(page.id, { src: rc.toDataURL('image/png'), width: ow, height: oh });
+      store.getState().updatePage(page.id, {
+        src: rc.toDataURL('image/png'),
+        width: ow,
+        height: oh,
+      });
       store.getState().setCropMode(false);
       showToast('Crop applied');
     } catch (err) {
@@ -218,10 +286,13 @@ export default function App() {
   }, []);
 
   // Export
-  const handleExport = useCallback((type) => {
-    if (!canvasRef.current || !activePage) return;
-    exportSinglePage(canvasRef.current, activePage.name, type);
-  }, [activePage]);
+  const handleExport = useCallback(
+    (type) => {
+      if (!canvasRef.current || !activePage) return;
+      exportSinglePage(canvasRef.current, activePage.name, type);
+    },
+    [activePage],
+  );
 
   const handleExportAll = useCallback(async () => {
     store.getState().setProcessing(true);
@@ -238,8 +309,17 @@ export default function App() {
     <div className="flex flex-col h-screen w-full bg-background font-sans">
       <Header />
       <div className="flex-1 flex overflow-hidden">
-        <PageSidebar fileInputRef={fileInputRef} onRotateLeft={() => rotateImage(-1)} onRotateRight={() => rotateImage(1)} />
-        <DocumentViewer canvasRef={canvasRef} containerRef={containerRef} viewerRef={viewerRef} fileInputRef={fileInputRef} />
+        <PageSidebar
+          fileInputRef={fileInputRef}
+          onRotateLeft={() => rotateImage(-1)}
+          onRotateRight={() => rotateImage(1)}
+        />
+        <DocumentViewer
+          canvasRef={canvasRef}
+          containerRef={containerRef}
+          viewerRef={viewerRef}
+          fileInputRef={fileInputRef}
+        />
         <ToolsPanel
           onApply={handleApply}
           onApplyAll={handleApplyAll}
@@ -251,8 +331,25 @@ export default function App() {
           onExportAll={handleExportAll}
         />
       </div>
-      <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" multiple accept="image/*,application/pdf" />
-      <Dialog open={dialog.open} onClose={() => store.getState().setDialog({ ...dialog, open: false })} title={dialog.title} description={dialog.description} variant={dialog.variant} onConfirm={dialog.onConfirm} confirmText="Delete" cancelText="Cancel" />
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileUpload}
+        className="hidden"
+        multiple
+        accept="image/*,application/pdf"
+      />
+      <div id="toast" className="toast" />
+      <Dialog
+        open={dialog.open}
+        onClose={() => store.getState().setDialog({ ...dialog, open: false })}
+        title={dialog.title}
+        description={dialog.description}
+        variant={dialog.variant}
+        onConfirm={dialog.onConfirm}
+        confirmText="Delete"
+        cancelText="Cancel"
+      />
     </div>
   );
 }
