@@ -101,7 +101,8 @@ export default function App() {
 
       ctx.putImageData(
         new ImageData(new Uint8ClampedArray(result.data), result.width, result.height),
-        0, 0,
+        0,
+        0,
       );
       store.getState().updatePage(page.id, { src: canvas.toDataURL('image/png') });
       showToast('Enhancement applied');
@@ -146,7 +147,8 @@ export default function App() {
 
         ctx.putImageData(
           new ImageData(new Uint8ClampedArray(result.data), result.width, result.height),
-          0, 0,
+          0,
+          0,
         );
         store.getState().updatePage(page.id, { src: tc.toDataURL('image/png') });
       }
@@ -158,12 +160,17 @@ export default function App() {
     }
   }, []);
 
-  // Reset to original
+  // Reset to original — restores src, width, and height
   const handleReset = useCallback(() => {
     const page = store.getState().activePage();
     if (!page) return;
-    store.getState().updatePage(page.id, { src: page.originalSrc });
+    store.getState().updatePage(page.id, {
+      src: page.originalSrc,
+      width: page.originalWidth,
+      height: page.originalHeight,
+    });
     store.getState().setCropMode(false);
+    useScannerStore.setState({ paintHistory: [] });
     showToast('Reset to original');
   }, []);
 
@@ -243,7 +250,8 @@ export default function App() {
       rc.height = result.height;
       rc.getContext('2d').putImageData(
         new ImageData(new Uint8ClampedArray(result.data), result.width, result.height),
-        0, 0,
+        0,
+        0,
       );
 
       store.getState().updatePage(page.id, {
@@ -278,10 +286,15 @@ export default function App() {
     store.getState().popPaintHistory();
   }, []);
 
+  // Clear all paint — restores to original fully
   const handleClearPaint = useCallback(() => {
     const page = store.getState().activePage();
     if (!page) return;
-    store.getState().updatePage(page.id, { src: page.originalSrc });
+    store.getState().updatePage(page.id, {
+      src: page.originalSrc,
+      width: page.originalWidth,
+      height: page.originalHeight,
+    });
     useScannerStore.setState({ paintHistory: [] });
   }, []);
 
