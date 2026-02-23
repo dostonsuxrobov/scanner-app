@@ -4,6 +4,7 @@ import { showToast, isValidPolygon } from './lib/utils';
 import { getWorker, terminateWorker } from './lib/image-worker-client';
 import { processFiles } from './lib/file-processor';
 import { exportSinglePage, exportAllAsPdf } from './lib/export-pdf';
+import { useDropZone } from './hooks/use-drop-zone';
 import { Header } from './components/header';
 import { PageSidebar } from './components/page-sidebar';
 import { DocumentViewer } from './components/document-viewer';
@@ -48,10 +49,8 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [pages.length]);
 
-  // File upload handler
-  const handleFileUpload = async (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length === 0) return;
+  // Shared file processing logic
+  const addFiles = useCallback(async (files) => {
     store.getState().setProcessing(true, 'Processing files...');
     const count = await processFiles(
       files,
@@ -60,8 +59,19 @@ export default function App() {
     );
     store.getState().setProcessing(false);
     if (count > 0) showToast(`Added ${count} page(s)`);
+    return count;
+  }, []);
+
+  // File input handler
+  const handleFileUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+    await addFiles(files);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  // Drag and drop
+  const isDragging = useDropZone(addFiles);
 
   // Wait for canvas to finish drawing before reading pixels
   const waitForCanvas = useCallback(() => {
@@ -160,7 +170,7 @@ export default function App() {
     }
   }, []);
 
-  // Reset to original — restores src, width, and height
+  // Reset to original
   const handleReset = useCallback(() => {
     const page = store.getState().activePage();
     if (!page) return;
@@ -286,7 +296,7 @@ export default function App() {
     store.getState().popPaintHistory();
   }, []);
 
-  // Clear all paint — restores to original fully
+  // Clear all paint
   const handleClearPaint = useCallback(() => {
     const page = store.getState().activePage();
     if (!page) return;
@@ -363,6 +373,19 @@ export default function App() {
         confirmText="Delete"
         cancelText="Cancel"
       />
+      {isDragging && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm border-2 border-dashed border-primary rounded-lg pointer-events-none">
+          <div className="flex flex-col items-center gap-2 text-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            <p className="text-lg font-medium">Drop files to add pages</p>
+            <p className="text-sm text-muted-foreground">Images and PDFs supported</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
