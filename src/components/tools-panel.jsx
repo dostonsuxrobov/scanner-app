@@ -9,13 +9,13 @@ import { PaintTool } from './tools/paint-tool';
 import { ExportTool } from './tools/export-tool';
 
 const TABS = [
-  { id: 'enhance', icon: Sparkles, label: 'Enhance' },
+  { id: 'enhance', icon: Sparkles, label: 'Scan' },
   { id: 'edit', icon: Crop, label: 'Edit' },
   { id: 'paint', icon: Paintbrush, label: 'Paint' },
   { id: 'export', icon: Download, label: 'Export' },
 ];
 
-export function ToolsPanel({ onApply, onApplyAll, onReset, onExecuteCrop, onUndo, onClearPaint, onExport, onExportAll }) {
+export function ToolsPanel({ onScanStep, onStepBack, onExecuteCrop, onUndo, onClearPaint, onExport, onExportAll }) {
   const rightPanelOpen = useScannerStore((s) => s.rightPanelOpen);
   const setRightPanelOpen = useScannerStore((s) => s.setRightPanelOpen);
   const activeTool = useScannerStore((s) => s.activeTool);
@@ -49,7 +49,7 @@ export function ToolsPanel({ onApply, onApplyAll, onReset, onExecuteCrop, onUndo
         <Separator />
         {rightPanelOpen && activePage && (
           <div className="p-4">
-            {activeTool === 'enhance' && <EnhanceTool onApply={onApply} onApplyAll={onApplyAll} onReset={onReset} />}
+            {activeTool === 'enhance' && <EnhanceTool onScanStep={onScanStep} onStepBack={onStepBack} />}
             {activeTool === 'edit' && <CropTool onExecuteCrop={onExecuteCrop} />}
             {activeTool === 'paint' && <PaintTool onUndo={onUndo} onClearAll={onClearPaint} />}
             {activeTool === 'export' && <ExportTool onExport={onExport} onExportAll={onExportAll} />}
