@@ -1,4 +1,4 @@
-import { Sparkles, Crop, Paintbrush, Download, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Sparkles, Crop, Paintbrush, Download, ChevronRight, ChevronLeft, RotateCcw } from 'lucide-react';
 import { Button } from './ui/button';
 import { Separator } from './ui/button';
 import { cn } from '../lib/utils';
@@ -15,7 +15,7 @@ const TABS = [
   { id: 'export', icon: Download, label: 'Export' },
 ];
 
-export function ToolsPanel({ onScanStep, onStepBack, onExecuteCrop, onUndo, onClearPaint, onExport, onExportAll }) {
+export function ToolsPanel({ onScanStep, onStepBack, onResetAll, onExecuteCrop, onUndo, onClearPaint, onExport, onExportAll }) {
   const rightPanelOpen = useScannerStore((s) => s.rightPanelOpen);
   const setRightPanelOpen = useScannerStore((s) => s.setRightPanelOpen);
   const activeTool = useScannerStore((s) => s.activeTool);
@@ -48,11 +48,15 @@ export function ToolsPanel({ onScanStep, onStepBack, onExecuteCrop, onUndo, onCl
         </div>
         <Separator />
         {rightPanelOpen && activePage && (
-          <div className="p-4">
+          <div className="p-4 space-y-4">
             {activeTool === 'enhance' && <EnhanceTool onScanStep={onScanStep} onStepBack={onStepBack} />}
             {activeTool === 'edit' && <CropTool onExecuteCrop={onExecuteCrop} />}
             {activeTool === 'paint' && <PaintTool onUndo={onUndo} onClearAll={onClearPaint} />}
             {activeTool === 'export' && <ExportTool onExport={onExport} onExportAll={onExportAll} />}
+            <Separator />
+            <Button variant="outline" className="w-full" onClick={onResetAll}>
+              <RotateCcw className="w-4 h-4 mr-2" /> Reset to Original
+            </Button>
           </div>
         )}
         {rightPanelOpen && !activePage && (
