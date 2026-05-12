@@ -17,6 +17,7 @@ export function DocumentViewer({ canvasRef, containerRef, viewerRef, fileInputRe
   const updatePage = useScannerStore((s) => s.updatePage);
   const pushPaintHistory = useScannerStore((s) => s.pushPaintHistory);
   const isPaintingRef = useRef(false);
+  const panRef = useRef({ active: false, startX: 0, startY: 0, scrollX: 0, scrollY: 0 });
 
   // Draw active page to canvas
   useEffect(() => {
@@ -65,8 +66,91 @@ export function DocumentViewer({ canvasRef, containerRef, viewerRef, fileInputRe
     }
   }, [cropMode, activePage]);
 
+  // Wheel zoom — anchored on cursor so the point under the mouse stays put
+  useEffect(() => {
+    const container = containerRef.current;
+    const viewer = viewerRef.current;
+    if (!container || !viewer || !activePage) return;
+
+    const handleWheel = (e) => {
+      if (useScannerStore.getState().activeTool === 'edit') return;
+      e.preventDefault();
+
+      const currentZoom = useScannerStore.getState().zoom;
+      const factor = e.deltaY > 0 ? 1 / 1.1 : 1.1;
+      const newZoom = Math.max(10, Math.min(400, Math.round(currentZoom * factor)));
+      if (newZoom === currentZoom) return;
+
+      const viewerRect = viewer.getBoundingClientRect();
+      const offsetInViewerX = e.clientX - viewerRect.left;
+      const offsetInViewerY = e.clientY - viewerRect.top;
+      const actualFactor = newZoom / currentZoom;
+      const targetViewerLeft = e.clientX - offsetInViewerX * actualFactor;
+      const targetViewerTop = e.clientY - offsetInViewerY * actualFactor;
+
+      useScannerStore.getState().setZoom(newZoom);
+
+      requestAnimationFrame(() => {
+        const newRect = viewer.getBoundingClientRect();
+        container.scrollLeft += newRect.left - targetViewerLeft;
+        container.scrollTop += newRect.top - targetViewerTop;
+      });
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, [activePage?.id]);
+
+  // Right-drag pan — adjusts container scroll while right mouse is held
+  useEffect(() => {
+    if (!activePage) return;
+
+    const handleMove = (e) => {
+      if (!panRef.current.active) return;
+      e.preventDefault();
+      const container = containerRef.current;
+      if (!container) return;
+      container.scrollLeft = panRef.current.scrollX - (e.clientX - panRef.current.startX);
+      container.scrollTop = panRef.current.scrollY - (e.clientY - panRef.current.startY);
+    };
+    const handleUp = (e) => {
+      if (e.button === 2 && panRef.current.active) {
+        panRef.current.active = false;
+        document.body.style.cursor = '';
+      }
+    };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, [activePage?.id]);
+
+  const handlePanStart = useCallback((e) => {
+    if (e.button !== 2) return;
+    if (useScannerStore.getState().activeTool === 'edit') return;
+    const container = containerRef.current;
+    if (!container) return;
+    e.preventDefault();
+    panRef.current = {
+      active: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      scrollX: container.scrollLeft,
+      scrollY: container.scrollTop,
+    };
+    document.body.style.cursor = 'grabbing';
+  }, []);
+
+  const handleContextMenu = useCallback((e) => {
+    if (useScannerStore.getState().activeTool === 'edit') return;
+    e.preventDefault();
+  }, []);
+
   // Paint handlers
   const handleMouseDown = useCallback((e) => {
+    if (e.button !== 0) return;
     if (activeTool !== 'paint' || cropMode || !activePage) return;
     const canvas = canvasRef.current;
     pushPaintHistory(canvas.toDataURL('image/png'));
@@ -127,7 +211,13 @@ export function DocumentViewer({ canvasRef, containerRef, viewerRef, fileInputRe
   }
 
   return (
-    <main ref={containerRef} id="main-content" className="flex-1 bg-muted/10 bg-dot-pattern overflow-auto">
+    <main
+      ref={containerRef}
+      id="main-content"
+      className="flex-1 bg-muted/10 bg-dot-pattern overflow-auto"
+      onMouseDown={handlePanStart}
+      onContextMenu={handleContextMenu}
+    >
       <div
         className="min-w-full min-h-full flex items-center justify-center p-8"
         style={{ minWidth: displayW + 64, minHeight: displayH + 64 }}
