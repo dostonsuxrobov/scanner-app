@@ -131,6 +131,20 @@ export default function App() {
     store.getState().popEnhanceHistory();
   }, []);
 
+  // Reset everything — discard all edits and return to the uploaded original
+  const handleResetAll = useCallback(() => {
+    const page = store.getState().activePage();
+    if (!page) return;
+    store.getState().updatePage(page.id, {
+      src: page.originalSrc,
+      width: page.originalWidth,
+      height: page.originalHeight,
+    });
+    store.getState().setCropMode(false);
+    useScannerStore.setState({ paintHistory: [], enhanceHistory: [] });
+    showToast('Reset to original');
+  }, []);
+
   // Rotate
   const rotateImage = useCallback((direction) => {
     const page = store.getState().activePage();
@@ -293,6 +307,7 @@ export default function App() {
         <ToolsPanel
           onScanStep={handleScanStep}
           onStepBack={handleStepBack}
+          onResetAll={handleResetAll}
           onExecuteCrop={handleExecuteCrop}
           onUndo={handleUndo}
           onClearPaint={handleClearPaint}
