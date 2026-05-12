@@ -87,26 +87,24 @@ export default function App() {
     });
   }, []);
 
-  // Enhance current page
-  const handleApply = useCallback(async () => {
+  // Scan: one incremental B&W contrast step on the current page
+  const handleScanStep = useCallback(async () => {
     const page = store.getState().activePage();
-    const { enhanceMode, enhanceIntensity } = store.getState();
     if (!page) return;
 
-    store.getState().setProcessing(true, 'Enhancing document...');
+    store.getState().setProcessing(true, 'Scanning...');
     try {
       await waitForCanvas();
 
       const canvas = canvasRef.current;
       const ctx = canvas.getContext('2d');
+      const previousSrc = canvas.toDataURL('image/png');
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-      const result = await getWorker().process('enhance', {
+      const result = await getWorker().process('scan', {
         imageData: imageData.data,
         width: canvas.width,
         height: canvas.height,
-        mode: enhanceMode,
-        intensity: enhanceIntensity,
       });
 
       ctx.putImageData(
@@ -114,74 +112,23 @@ export default function App() {
         0,
         0,
       );
+      store.getState().pushEnhanceHistory(previousSrc);
       store.getState().updatePage(page.id, { src: canvas.toDataURL('image/png') });
-      showToast('Enhancement applied');
     } catch (err) {
-      showToast(`Enhancement failed: ${err.message}`, true);
+      showToast(`Scan failed: ${err.message}`, true);
     } finally {
       store.getState().setProcessing(false);
     }
   }, []);
 
-  // Enhance all pages
-  const handleApplyAll = useCallback(async () => {
-    const { pages: allPages, enhanceMode, enhanceIntensity } = store.getState();
-    if (allPages.length === 0) return;
-    store.getState().setProcessing(true);
-    try {
-      for (let i = 0; i < allPages.length; i++) {
-        store.getState().setProcessing(true, `Enhancing page ${i + 1}/${allPages.length}...`);
-        const page = allPages[i];
-
-        const img = await new Promise((res, rej) => {
-          const image = new Image();
-          image.onload = () => res(image);
-          image.onerror = rej;
-          image.src = page.src;
-        });
-
-        const tc = document.createElement('canvas');
-        tc.width = page.width;
-        tc.height = page.height;
-        const ctx = tc.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-        const imageData = ctx.getImageData(0, 0, tc.width, tc.height);
-
-        const result = await getWorker().process('enhance', {
-          imageData: imageData.data,
-          width: tc.width,
-          height: tc.height,
-          mode: enhanceMode,
-          intensity: enhanceIntensity,
-        });
-
-        ctx.putImageData(
-          new ImageData(new Uint8ClampedArray(result.data), result.width, result.height),
-          0,
-          0,
-        );
-        store.getState().updatePage(page.id, { src: tc.toDataURL('image/png') });
-      }
-      showToast(`Enhanced ${allPages.length} page(s)`);
-    } catch (err) {
-      showToast(`Batch enhancement failed: ${err.message}`, true);
-    } finally {
-      store.getState().setProcessing(false);
-    }
-  }, []);
-
-  // Reset to original
-  const handleReset = useCallback(() => {
-    const page = store.getState().activePage();
-    if (!page) return;
-    store.getState().updatePage(page.id, {
-      src: page.originalSrc,
-      width: page.originalWidth,
-      height: page.originalHeight,
-    });
-    store.getState().setCropMode(false);
-    useScannerStore.setState({ paintHistory: [] });
-    showToast('Reset to original');
+  // Step back: restore the page to the state before the last scan
+  const handleStepBack = useCallback(() => {
+    const s = store.getState();
+    const page = s.activePage();
+    if (!page || s.enhanceHistory.length === 0) return;
+    const previousSrc = s.enhanceHistory[s.enhanceHistory.length - 1];
+    store.getState().updatePage(page.id, { src: previousSrc });
+    store.getState().popEnhanceHistory();
   }, []);
 
   // Rotate
@@ -344,9 +291,8 @@ export default function App() {
           fileInputRef={fileInputRef}
         />
         <ToolsPanel
-          onApply={handleApply}
-          onApplyAll={handleApplyAll}
-          onReset={handleReset}
+          onScanStep={handleScanStep}
+          onStepBack={handleStepBack}
           onExecuteCrop={handleExecuteCrop}
           onUndo={handleUndo}
           onClearPaint={handleClearPaint}
