@@ -10,8 +10,7 @@ export const useScannerStore = create((set, get) => ({
   processingMessage: 'Processing...',
   rightPanelOpen: true,
   activeTool: 'enhance',
-  enhanceMode: 'auto',
-  enhanceIntensity: 75,
+  enhanceHistory: [],
   cropMode: false,
   cropPoints: null,
   paintHistory: [],
@@ -28,7 +27,7 @@ export const useScannerStore = create((set, get) => ({
 
   // Setters
   setZoom: (fn) => set((s) => ({ zoom: typeof fn === 'function' ? fn(s.zoom) : fn })),
-  setActivePageId: (id) => set({ activePageId: id, cropMode: false, cropPoints: null, paintHistory: [] }),
+  setActivePageId: (id) => set({ activePageId: id, cropMode: false, cropPoints: null, paintHistory: [], enhanceHistory: [] }),
   setProcessing: (isProcessing, msg) => set({ isProcessing, ...(msg ? { processingMessage: msg } : {}) }),
   setActiveTool: (tool) => {
     set((s) => ({
@@ -38,8 +37,14 @@ export const useScannerStore = create((set, get) => ({
       rightPanelOpen: true,
     }));
   },
-  setEnhanceMode: (mode) => set({ enhanceMode: mode }),
-  setEnhanceIntensity: (v) => set({ enhanceIntensity: v }),
+  pushEnhanceHistory: (src) =>
+    set((s) => ({
+      enhanceHistory: s.enhanceHistory.length >= 20
+        ? [...s.enhanceHistory.slice(1), src]
+        : [...s.enhanceHistory, src],
+    })),
+  popEnhanceHistory: () =>
+    set((s) => ({ enhanceHistory: s.enhanceHistory.slice(0, -1) })),
   setCropMode: (v) => set({ cropMode: v, ...(v ? {} : { cropPoints: null }) }),
   setCropPoints: (fn) => set((s) => ({ cropPoints: typeof fn === 'function' ? fn(s.cropPoints) : fn })),
   setBrushColor: (c) => set({ brushColor: c }),
