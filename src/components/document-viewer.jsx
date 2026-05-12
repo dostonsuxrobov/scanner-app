@@ -18,6 +18,7 @@ export function DocumentViewer({ canvasRef, containerRef, viewerRef, fileInputRe
   const pushPaintHistory = useScannerStore((s) => s.pushPaintHistory);
   const isPaintingRef = useRef(false);
   const panRef = useRef({ active: false, startX: 0, startY: 0, scrollX: 0, scrollY: 0 });
+  const brushCursorRef = useRef(null);
 
   // Draw active page to canvas
   useEffect(() => {
@@ -148,6 +149,32 @@ export function DocumentViewer({ canvasRef, containerRef, viewerRef, fileInputRe
     e.preventDefault();
   }, []);
 
+  // Brush-size cursor preview — follows the mouse while paint tool is active
+  useEffect(() => {
+    if (activeTool !== 'paint' || cropMode || !activePage) return;
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+
+    const onMove = (e) => {
+      const el = brushCursorRef.current;
+      if (!el) return;
+      const rect = viewer.getBoundingClientRect();
+      el.style.left = e.clientX - rect.left + 'px';
+      el.style.top = e.clientY - rect.top + 'px';
+      el.style.display = 'block';
+    };
+    const onLeave = () => {
+      if (brushCursorRef.current) brushCursorRef.current.style.display = 'none';
+    };
+
+    viewer.addEventListener('mousemove', onMove);
+    viewer.addEventListener('mouseleave', onLeave);
+    return () => {
+      viewer.removeEventListener('mousemove', onMove);
+      viewer.removeEventListener('mouseleave', onLeave);
+    };
+  }, [activeTool, cropMode, activePage?.id]);
+
   // Paint handlers
   const handleMouseDown = useCallback((e) => {
     if (e.button !== 0) return;
@@ -235,9 +262,24 @@ export function DocumentViewer({ canvasRef, containerRef, viewerRef, fileInputRe
             ref={canvasRef}
             className={cn(
               'w-full h-full block',
-              activeTool === 'paint' && !cropMode ? 'cursor-crosshair' : 'cursor-default',
+              activeTool === 'paint' && !cropMode ? 'cursor-none' : 'cursor-default',
             )}
           />
+          {activeTool === 'paint' && !cropMode && (
+            <div
+              ref={brushCursorRef}
+              className="absolute rounded-full pointer-events-none z-20"
+              style={{
+                width: brushSize,
+                height: brushSize,
+                transform: 'translate(-50%, -50%)',
+                backgroundColor: brushColor + '66',
+                border: '1.5px solid rgba(0,0,0,0.85)',
+                boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.85)',
+                display: 'none',
+              }}
+            />
+          )}
           {isProcessing && (
             <div className="absolute inset-0 bg-white/50 backdrop-blur-[2px] flex items-center justify-center z-30">
               <div className="bg-white px-6 py-3 rounded-full shadow-lg border flex items-center gap-3">
