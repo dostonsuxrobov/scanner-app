@@ -16,6 +16,8 @@ export const useScannerStore = create((set, get) => ({
   paintHistory: [],
   brushColor: '#000000',
   brushSize: 10,
+  paintMode: 'brush',
+  cloneSource: null,
 
   dialog: { open: false, title: '', description: '', onConfirm: null, variant: 'default' },
 
@@ -27,7 +29,7 @@ export const useScannerStore = create((set, get) => ({
 
   // Setters
   setZoom: (fn) => set((s) => ({ zoom: typeof fn === 'function' ? fn(s.zoom) : fn })),
-  setActivePageId: (id) => set({ activePageId: id, cropMode: false, cropPoints: null, paintHistory: [], enhanceHistory: [] }),
+  setActivePageId: (id) => set({ activePageId: id, cropMode: false, cropPoints: null, paintHistory: [], enhanceHistory: [], cloneSource: null }),
   setProcessing: (isProcessing, msg) => set({ isProcessing, ...(msg ? { processingMessage: msg } : {}) }),
   setActiveTool: (tool) => {
     set((s) => ({
@@ -49,6 +51,8 @@ export const useScannerStore = create((set, get) => ({
   setCropPoints: (fn) => set((s) => ({ cropPoints: typeof fn === 'function' ? fn(s.cropPoints) : fn })),
   setBrushColor: (c) => set({ brushColor: c }),
   setBrushSize: (s) => set({ brushSize: s }),
+  setPaintMode: (m) => set({ paintMode: m }),
+  setCloneSource: (p) => set({ cloneSource: p }),
   setRightPanelOpen: (v) => set({ rightPanelOpen: v }),
   setDialog: (d) => set({ dialog: d }),
   pushPaintHistory: (entry) =>
