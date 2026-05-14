@@ -14,11 +14,16 @@ export function DocumentViewer({ canvasRef, containerRef, viewerRef, fileInputRe
   const cropMode = useScannerStore((s) => s.cropMode);
   const brushColor = useScannerStore((s) => s.brushColor);
   const brushSize = useScannerStore((s) => s.brushSize);
+  const paintMode = useScannerStore((s) => s.paintMode);
+  const cloneSource = useScannerStore((s) => s.cloneSource);
+  const setCloneSource = useScannerStore((s) => s.setCloneSource);
   const updatePage = useScannerStore((s) => s.updatePage);
   const pushPaintHistory = useScannerStore((s) => s.pushPaintHistory);
   const isPaintingRef = useRef(false);
   const panRef = useRef({ active: false, startX: 0, startY: 0, scrollX: 0, scrollY: 0 });
   const brushCursorRef = useRef(null);
+  // Clone-stroke state: snapshot of the canvas at stroke start, source->dest offset, last stamped point
+  const cloneStrokeRef = useRef({ snapshotCanvas: null, offsetX: 0, offsetY: 0, lastX: 0, lastY: 0 });
 
   // Draw active page to canvas
   useEffect(() => {
@@ -175,25 +180,74 @@ export function DocumentViewer({ canvasRef, containerRef, viewerRef, fileInputRe
     };
   }, [activeTool, cropMode, activePage?.id]);
 
+  // Stamps a soft-edged circular region from the stroke-start snapshot onto the live canvas.
+  // The source is `point + offset`; a radial gradient mask softens the edge so repeated stamps blend.
+  const stampClone = useCallback((ctx, snapshot, x, y, radius, offsetX, offsetY) => {
+    const size = Math.max(2, Math.ceil(radius * 2));
+    const tmp = document.createElement('canvas');
+    tmp.width = size;
+    tmp.height = size;
+    const tctx = tmp.getContext('2d');
+    tctx.drawImage(snapshot, x + offsetX - radius, y + offsetY - radius, size, size, 0, 0, size, size);
+    tctx.globalCompositeOperation = 'destination-in';
+    const grad = tctx.createRadialGradient(radius, radius, radius * 0.4, radius, radius, radius);
+    grad.addColorStop(0, 'rgba(0,0,0,1)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    tctx.fillStyle = grad;
+    tctx.fillRect(0, 0, size, size);
+    ctx.drawImage(tmp, x - radius, y - radius);
+  }, []);
+
   // Paint handlers
   const handleMouseDown = useCallback((e) => {
     if (e.button !== 0) return;
     if (activeTool !== 'paint' || cropMode || !activePage) return;
     const canvas = canvasRef.current;
-    pushPaintHistory(canvas.toDataURL('image/png'));
-
     const rect = canvas.getBoundingClientRect();
     const sx = canvas.width / rect.width;
     const sy = canvas.height / rect.height;
+    const px = (e.clientX - rect.left) * sx;
+    const py = (e.clientY - rect.top) * sy;
+
+    // Alt+click in clone mode sets the source point instead of painting
+    if (paintMode === 'clone' && e.altKey) {
+      setCloneSource({ x: px, y: py });
+      return;
+    }
+
+    if (paintMode === 'clone') {
+      const src = useScannerStore.getState().cloneSource;
+      if (!src) return; // no source set, ignore
+      // Snapshot current canvas as the clone source (so re-painting same area pulls original pixels)
+      const snap = document.createElement('canvas');
+      snap.width = canvas.width;
+      snap.height = canvas.height;
+      snap.getContext('2d').drawImage(canvas, 0, 0);
+      cloneStrokeRef.current = {
+        snapshotCanvas: snap,
+        offsetX: src.x - px,
+        offsetY: src.y - py,
+        lastX: px,
+        lastY: py,
+      };
+      pushPaintHistory(canvas.toDataURL('image/png'));
+      const ctx = canvas.getContext('2d');
+      stampClone(ctx, snap, px, py, (brushSize * sx) / 2, src.x - px, src.y - py);
+      isPaintingRef.current = true;
+      return;
+    }
+
+    // Brush mode (original behavior)
+    pushPaintHistory(canvas.toDataURL('image/png'));
     const ctx = canvas.getContext('2d');
     ctx.beginPath();
-    ctx.moveTo((e.clientX - rect.left) * sx, (e.clientY - rect.top) * sy);
+    ctx.moveTo(px, py);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.strokeStyle = brushColor;
     ctx.lineWidth = brushSize * sx;
     isPaintingRef.current = true;
-  }, [activeTool, cropMode, activePage, brushColor, brushSize]);
+  }, [activeTool, cropMode, activePage, brushColor, brushSize, paintMode, setCloneSource, stampClone, pushPaintHistory]);
 
   const handleMouseMove = useCallback((e) => {
     if (!isPaintingRef.current) return;
@@ -201,14 +255,37 @@ export function DocumentViewer({ canvasRef, containerRef, viewerRef, fileInputRe
     const rect = canvas.getBoundingClientRect();
     const sx = canvas.width / rect.width;
     const sy = canvas.height / rect.height;
+    const px = (e.clientX - rect.left) * sx;
+    const py = (e.clientY - rect.top) * sy;
     const ctx = canvas.getContext('2d');
-    ctx.lineTo((e.clientX - rect.left) * sx, (e.clientY - rect.top) * sy);
+
+    if (paintMode === 'clone') {
+      const c = cloneStrokeRef.current;
+      if (!c.snapshotCanvas) return;
+      const radius = (brushSize * sx) / 2;
+      // Interpolate stamps along the segment to avoid gaps on fast strokes
+      const dx = px - c.lastX;
+      const dy = py - c.lastY;
+      const dist = Math.hypot(dx, dy);
+      const step = Math.max(1, radius / 3);
+      const steps = Math.max(1, Math.ceil(dist / step));
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        stampClone(ctx, c.snapshotCanvas, c.lastX + dx * t, c.lastY + dy * t, radius, c.offsetX, c.offsetY);
+      }
+      c.lastX = px;
+      c.lastY = py;
+      return;
+    }
+
+    ctx.lineTo(px, py);
     ctx.stroke();
-  }, []);
+  }, [paintMode, brushSize, stampClone]);
 
   const handleMouseUp = useCallback(() => {
     if (isPaintingRef.current) {
       isPaintingRef.current = false;
+      cloneStrokeRef.current.snapshotCanvas = null;
       const newSrc = canvasRef.current.toDataURL('image/png');
       updatePage(activePage?.id, { src: newSrc });
     }
@@ -236,6 +313,10 @@ export function DocumentViewer({ canvasRef, containerRef, viewerRef, fileInputRe
       </main>
     );
   }
+
+  const showCloneCursor = activeTool === 'paint' && paintMode === 'clone' && !cropMode;
+  const sourceLeftPct = cloneSource ? (cloneSource.x / activePage.width) * 100 : 0;
+  const sourceTopPct = cloneSource ? (cloneSource.y / activePage.height) * 100 : 0;
 
   return (
     <main
@@ -273,12 +354,36 @@ export function DocumentViewer({ canvasRef, containerRef, viewerRef, fileInputRe
                 width: brushSize,
                 height: brushSize,
                 transform: 'translate(-50%, -50%)',
-                backgroundColor: brushColor + '66',
+                backgroundColor: paintMode === 'clone' ? 'transparent' : brushColor + '66',
                 border: '1.5px solid rgba(0,0,0,0.85)',
                 boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.85)',
                 display: 'none',
               }}
             />
+          )}
+          {showCloneCursor && cloneSource && (
+            <div
+              className="absolute pointer-events-none z-20"
+              style={{
+                left: `${sourceLeftPct}%`,
+                top: `${sourceTopPct}%`,
+                transform: 'translate(-50%, -50%)',
+              }}
+              aria-hidden
+            >
+              <svg width="22" height="22" viewBox="0 0 22 22" style={{ display: 'block', filter: 'drop-shadow(0 0 1px rgba(0,0,0,0.5))' }}>
+                <circle cx="11" cy="11" r="8" fill="none" stroke="white" strokeWidth="2.5" />
+                <circle cx="11" cy="11" r="8" fill="none" stroke="hsl(var(--primary))" strokeWidth="1.5" />
+                <line x1="11" y1="0" x2="11" y2="6" stroke="white" strokeWidth="2.5" />
+                <line x1="11" y1="0" x2="11" y2="6" stroke="hsl(var(--primary))" strokeWidth="1.5" />
+                <line x1="11" y1="16" x2="11" y2="22" stroke="white" strokeWidth="2.5" />
+                <line x1="11" y1="16" x2="11" y2="22" stroke="hsl(var(--primary))" strokeWidth="1.5" />
+                <line x1="0" y1="11" x2="6" y2="11" stroke="white" strokeWidth="2.5" />
+                <line x1="0" y1="11" x2="6" y2="11" stroke="hsl(var(--primary))" strokeWidth="1.5" />
+                <line x1="16" y1="11" x2="22" y2="11" stroke="white" strokeWidth="2.5" />
+                <line x1="16" y1="11" x2="22" y2="11" stroke="hsl(var(--primary))" strokeWidth="1.5" />
+              </svg>
+            </div>
           )}
           {isProcessing && (
             <div className="absolute inset-0 bg-white/50 backdrop-blur-[2px] flex items-center justify-center z-30">
