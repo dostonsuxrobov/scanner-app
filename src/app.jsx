@@ -1,17 +1,20 @@
-import { useRef, useEffect, useCallback } from 'react';
-import { useScannerStore } from './store/scanner-store';
-import { showToast, isValidPolygon } from './lib/utils';
-import { getWorker, terminateWorker } from './lib/image-worker-client';
-import { processFiles } from './lib/file-processor';
-import { exportSinglePage, exportAllAsPdf } from './lib/export-pdf';
-import { useDropZone } from './hooks/use-drop-zone';
-import { Header } from './components/header';
-import { PageSidebar } from './components/page-sidebar';
-import { DocumentViewer } from './components/document-viewer';
-import { ToolsPanel } from './components/tools-panel';
-import { Dialog } from './components/ui/dialog';
+import { useRef, useEffect, useCallback, useState } from "react";
+import { useScannerStore } from "./store/scanner-store";
+import { showToast, isValidPolygon } from "./lib/utils";
+import { getWorker, terminateWorker } from "./lib/image-worker-client";
+import { processFiles } from "./lib/file-processor";
+import { exportSinglePage, exportAllAsPdf } from "./lib/export-pdf";
+import { useDropZone } from "./hooks/use-drop-zone";
+import { AdvancedEditor } from "./components/advanced-editor";
+import { Header } from "./components/header";
+import { PageSidebar } from "./components/page-sidebar";
+import { DocumentViewer } from "./components/document-viewer";
+import { ToolsPanel } from "./components/tools-panel";
+import { Dialog } from "./components/ui/dialog";
 
 export default function App() {
+  const [advanced, setAdvanced] = useState(false);
+  const [editorSession, setEditorSession] = useState(0);
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
@@ -42,16 +45,16 @@ export default function App() {
     const handler = (e) => {
       if (pages.length > 0) {
         e.preventDefault();
-        e.returnValue = '';
+        e.returnValue = "";
       }
     };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
   }, [pages.length]);
 
   // Shared file processing logic
   const addFiles = useCallback(async (files) => {
-    store.getState().setProcessing(true, 'Processing files...');
+    store.getState().setProcessing(true, "Processing files...");
     const count = await processFiles(
       files,
       (page) => store.getState().addPage(page),
@@ -67,7 +70,7 @@ export default function App() {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
     await addFiles(files);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   // Drag and drop
@@ -77,7 +80,7 @@ export default function App() {
   const waitForCanvas = useCallback(() => {
     return new Promise((resolve) => {
       const check = () => {
-        if (canvasRef.current?.dataset.ready === 'true') {
+        if (canvasRef.current?.dataset.ready === "true") {
           resolve();
         } else {
           requestAnimationFrame(check);
@@ -92,28 +95,34 @@ export default function App() {
     const page = store.getState().activePage();
     if (!page) return;
 
-    store.getState().setProcessing(true, 'Scanning...');
+    store.getState().setProcessing(true, "Scanning...");
     try {
       await waitForCanvas();
 
       const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
-      const previousSrc = canvas.toDataURL('image/png');
+      const ctx = canvas.getContext("2d");
+      const previousSrc = canvas.toDataURL("image/png");
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-      const result = await getWorker().process('scan', {
+      const result = await getWorker().process("scan", {
         imageData: imageData.data,
         width: canvas.width,
         height: canvas.height,
       });
 
       ctx.putImageData(
-        new ImageData(new Uint8ClampedArray(result.data), result.width, result.height),
+        new ImageData(
+          new Uint8ClampedArray(result.data),
+          result.width,
+          result.height,
+        ),
         0,
         0,
       );
       store.getState().pushEnhanceHistory(previousSrc);
-      store.getState().updatePage(page.id, { src: canvas.toDataURL('image/png') });
+      store
+        .getState()
+        .updatePage(page.id, { src: canvas.toDataURL("image/png") });
     } catch (err) {
       showToast(`Scan failed: ${err.message}`, true);
     } finally {
@@ -142,7 +151,7 @@ export default function App() {
     });
     store.getState().setCropMode(false);
     useScannerStore.setState({ paintHistory: [], enhanceHistory: [] });
-    showToast('Reset to original');
+    showToast("Reset to original");
   }, []);
 
   // Rotate
@@ -150,7 +159,7 @@ export default function App() {
     const page = store.getState().activePage();
     if (!page) return;
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
     const img = new Image();
     img.onload = () => {
       canvas.width = page.height;
@@ -159,7 +168,7 @@ export default function App() {
       ctx.rotate((direction * 90 * Math.PI) / 180);
       ctx.drawImage(img, -page.width / 2, -page.height / 2);
       store.getState().updatePage(page.id, {
-        src: canvas.toDataURL('image/png'),
+        src: canvas.toDataURL("image/png"),
         width: canvas.width,
         height: canvas.height,
       });
@@ -174,11 +183,11 @@ export default function App() {
     const cropPoints = s.cropPoints;
     if (!cropPoints || !page || !viewerRef.current) return;
     if (!isValidPolygon(cropPoints)) {
-      showToast('Invalid crop shape', true);
+      showToast("Invalid crop shape", true);
       return;
     }
 
-    store.getState().setProcessing(true, 'Applying perspective crop...');
+    store.getState().setProcessing(true, "Applying perspective crop...");
     try {
       await waitForCanvas();
 
@@ -188,26 +197,38 @@ export default function App() {
       const sy = canvas.height / rect.height;
       const scaled = cropPoints.map((p) => ({ x: p.x * sx, y: p.y * sy }));
 
-      const w1 = Math.hypot(scaled[1].x - scaled[0].x, scaled[1].y - scaled[0].y);
-      const w2 = Math.hypot(scaled[2].x - scaled[3].x, scaled[2].y - scaled[3].y);
-      const h1 = Math.hypot(scaled[3].x - scaled[0].x, scaled[3].y - scaled[0].y);
-      const h2 = Math.hypot(scaled[2].x - scaled[1].x, scaled[2].y - scaled[1].y);
+      const w1 = Math.hypot(
+        scaled[1].x - scaled[0].x,
+        scaled[1].y - scaled[0].y,
+      );
+      const w2 = Math.hypot(
+        scaled[2].x - scaled[3].x,
+        scaled[2].y - scaled[3].y,
+      );
+      const h1 = Math.hypot(
+        scaled[3].x - scaled[0].x,
+        scaled[3].y - scaled[0].y,
+      );
+      const h2 = Math.hypot(
+        scaled[2].x - scaled[1].x,
+        scaled[2].y - scaled[1].y,
+      );
       const ow = Math.round(Math.max(w1, w2));
       const oh = Math.round(Math.max(h1, h2));
 
       if (ow < 10 || oh < 10) {
-        showToast('Crop area too small', true);
+        showToast("Crop area too small", true);
         return;
       }
       if (ow > 10000 || oh > 10000) {
-        showToast('Crop area too large', true);
+        showToast("Crop area too large", true);
         return;
       }
 
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext("2d");
       const sourceData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-      const result = await getWorker().process('transform', {
+      const result = await getWorker().process("transform", {
         sourceData: sourceData.data,
         sourceWidth: canvas.width,
         sourceHeight: canvas.height,
@@ -216,22 +237,26 @@ export default function App() {
         outputHeight: oh,
       });
 
-      const rc = document.createElement('canvas');
+      const rc = document.createElement("canvas");
       rc.width = result.width;
       rc.height = result.height;
-      rc.getContext('2d').putImageData(
-        new ImageData(new Uint8ClampedArray(result.data), result.width, result.height),
+      rc.getContext("2d").putImageData(
+        new ImageData(
+          new Uint8ClampedArray(result.data),
+          result.width,
+          result.height,
+        ),
         0,
         0,
       );
 
       store.getState().updatePage(page.id, {
-        src: rc.toDataURL('image/png'),
+        src: rc.toDataURL("image/png"),
         width: ow,
         height: oh,
       });
       store.getState().setCropMode(false);
-      showToast('Crop applied');
+      showToast("Crop applied");
     } catch (err) {
       showToast(`Crop failed: ${err.message}`, true);
     } finally {
@@ -248,10 +273,12 @@ export default function App() {
     const img = new Image();
     img.onload = () => {
       const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext("2d");
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0);
-      store.getState().updatePage(page.id, { src: canvas.toDataURL('image/png') });
+      store
+        .getState()
+        .updatePage(page.id, { src: canvas.toDataURL("image/png") });
     };
     img.src = lastState;
     store.getState().popPaintHistory();
@@ -281,7 +308,9 @@ export default function App() {
   const handleExportAll = useCallback(async () => {
     store.getState().setProcessing(true);
     try {
-      await exportAllAsPdf(pages, (msg) => store.getState().setProcessing(true, msg));
+      await exportAllAsPdf(pages, (msg) =>
+        store.getState().setProcessing(true, msg),
+      );
     } catch (err) {
       showToast(`Export failed: ${err.message}`, true);
     } finally {
@@ -291,8 +320,18 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen w-full bg-background font-sans">
-      <Header />
-      <div className="flex-1 flex overflow-hidden">
+      <Header advanced={advanced} onToggleMode={() => setAdvanced((v) => !v)} />
+      <AdvancedEditor
+        key={editorSession}
+        visible={advanced}
+        autoOpenPage={editorSession === 0}
+        onFinish={() => setAdvanced(false)}
+        onRestart={() => setEditorSession((n) => n + 1)}
+      />
+      <div
+        className="flex-1 flex overflow-hidden"
+        style={advanced ? { display: "none" } : undefined}
+      >
         <PageSidebar
           fileInputRef={fileInputRef}
           onRotateLeft={() => rotateImage(-1)}
@@ -337,13 +376,25 @@ export default function App() {
       {isDragging && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm border-2 border-dashed border-primary rounded-lg pointer-events-none">
           <div className="flex flex-col items-center gap-2 text-primary">
-            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="17 8 12 3 7 8" />
               <line x1="12" y1="3" x2="12" y2="15" />
             </svg>
             <p className="text-lg font-medium">Drop files to add pages</p>
-            <p className="text-sm text-muted-foreground">Images and PDFs supported</p>
+            <p className="text-sm text-muted-foreground">
+              Images and PDFs supported
+            </p>
           </div>
         </div>
       )}
