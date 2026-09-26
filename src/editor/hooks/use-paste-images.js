@@ -21,7 +21,7 @@ export function usePasteImages(rt, active) {
   useEffect(() => {
     if (!active) return undefined;
     async function onPaste(event) {
-      if (/^(INPUT|TEXTAREA)$/.test(event.target.tagName) || rt.store.getState().dialog || !rt.session.hasDocument) return;
+      if (/^(INPUT|TEXTAREA)$/.test(event.target.tagName) || rt.store.getState().dialog || !rt.session.hasDocument || rt.gestureActive) return;
       event.preventDefault();
       const file = [...(event.clipboardData?.files ?? [])].find((f) => f.type.startsWith("image/"));
       if (file && !(await isOwnCopy(rt, file))) pasteImageFile(rt, file);

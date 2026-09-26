@@ -24,6 +24,9 @@ export function createEditorRuntime() {
     scheduler,
     tools: {},
     keys: { space: false },
+    // True while a tool drag is in progress; shortcuts wait until it ends so
+    // they cannot interleave with the drag's own undo step.
+    gestureActive: false,
 
     get live() {
       return live;

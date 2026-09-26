@@ -39,8 +39,11 @@ export function previewLayerOperation(rt, operation) {
   rt.setLive({ replace: { layerId: layer.id, canvas, x: layer.x, y: layer.y } }, layerBounds(layer));
 }
 
+// Removes only a preview made by previewLayerOperation.
 export function endPreview(rt) {
-  const layer = rt.session.activeLayer;
+  const replaced = rt.live.replace;
+  if (!replaced) return;
+  const layer = rt.session.layer(replaced.layerId);
   rt.setLive(null, layer ? layerBounds(layer) : null);
 }
 

@@ -1,25 +1,33 @@
 // Blend mode, opacity, and locks of the active layer. Dragging the opacity
 // slider previews live and records a single undo step when released.
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Lock, LockOpen, Grid2x2 } from "lucide-react";
 import { BLEND_MODES, layerBounds } from "../../engine/layer.js";
 import { setLayerProperty } from "../../commands/layer-commands.js";
 import { useRuntime } from "../editor-context.js";
 import { NumberField } from "../fields/number-field.jsx";
+import { settle } from "../../commands/settle.js";
 
 export function LayerProperties({ layer }) {
   const rt = useRuntime();
   const drag = useRef(null);
+  const [dragging, setDragging] = useState(null); // value shown while dragging
 
   const preview = (value) => {
-    if (!drag.current) drag.current = rt.session.begin("Layer opacity");
+    if (!drag.current) {
+      if (!settle(rt)) return;
+      drag.current = rt.session.begin("Layer opacity");
+    }
     layer.opacity = value;
+    setDragging(value);
     rt.invalidate(layerBounds(layer));
   };
   const finish = () => {
     if (drag.current) rt.session.end(drag.current);
     drag.current = null;
+    setDragging(null);
   };
+  const opacity = dragging ?? layer.opacity;
 
   return (
     <div className="ae-layer-props">
@@ -36,13 +44,13 @@ export function LayerProperties({ layer }) {
         ))}
       </select>
       <div className="ae-opacity">
-        <NumberField label="Opacity" unit="%" min={0} max={100} value={layer.opacity} disabled={layer.locked} onChange={(v) => setLayerProperty(rt, layer.id, "opacity", v, "Layer opacity")} />
+        <NumberField label="Opacity" unit="%" min={0} max={100} value={opacity} disabled={layer.locked} onChange={(v) => setLayerProperty(rt, layer.id, "opacity", v, "Layer opacity")} />
         <input
           type="range"
           aria-label="Opacity slider"
           min={0}
           max={100}
-          value={layer.opacity}
+          value={opacity}
           disabled={layer.locked}
           onChange={(e) => preview(Number(e.target.value))}
           onPointerUp={finish}

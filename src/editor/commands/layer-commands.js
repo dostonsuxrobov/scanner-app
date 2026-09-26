@@ -1,6 +1,6 @@
 // Layer menu and Layers panel actions.
 import { createCanvas } from "../engine/canvas.js";
-import { createLayer, duplicateLayer, isTextLayer } from "../engine/layer.js";
+import { createLayer, duplicateLayer, isTextLayer, moveLayerTo } from "../engine/layer.js";
 import { MAX_LAYERS } from "../engine/limits.js";
 import { flatten } from "../engine/flatten.js";
 import { rasterizeText } from "../tools/helpers/editable-layer.js";
@@ -117,12 +117,21 @@ export function rasterizeActiveText(rt) {
 // Changes one property (visible, opacity, blend, locked, alphaLocked, name).
 export function setLayerProperty(rt, id, key, value, label) {
   const layer = rt.session.layer(id);
-  if (!layer || layer[key] === value) return;
+  if (!layer || layer[key] === value || !settle(rt)) return;
   if (key !== "locked" && key !== "visible" && key !== "name" && layer.locked)
     return rt.toast(`“${layer.name}” is locked.`, true);
-  rt.session.edit(label ?? `Layer ${key}`, () => {
-    layer[key] = value;
-  });
+  // Repeated changes to the same property (scrubbing, typing) are one undo step.
+  const merge = `${id}:${key}`;
+  rt.session.edit(
+    label ?? `Layer ${key}`,
+    () => {
+      if (key === "x") moveLayerTo(layer, value, layer.y);
+      else if (key === "y") moveLayerTo(layer, layer.x, value);
+      else layer[key] = value;
+    },
+    [],
+    { merge },
+  );
 }
 
 // Aligns the active layer's bounds to the canvas.
@@ -135,8 +144,5 @@ export function alignLayer(rt, how) {
   const w = layer.canvas.width, h = layer.canvas.height;
   const x = { left: 0, center: Math.round((doc.width - w) / 2), right: doc.width - w }[how];
   const y = { top: 0, middle: Math.round((doc.height - h) / 2), bottom: doc.height - h }[how];
-  session.edit("Align layer", () => {
-    if (x !== undefined) layer.x = x;
-    if (y !== undefined) layer.y = y;
-  });
+  session.edit("Align layer", () => moveLayerTo(layer, x ?? layer.x, y ?? layer.y));
 }

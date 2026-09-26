@@ -123,14 +123,14 @@ export function sendToScanner(rt) {
   const doc = rt.session.doc;
   const src = flatten(doc).toDataURL("image/png");
   const scanner = useScannerStore.getState();
-  const page = doc.sourceId && scanner.pages.find((p) => p.id === doc.sourceId);
+  const page = rt.session.sourceId && scanner.pages.find((p) => p.id === rt.session.sourceId);
   if (page) {
     scanner.updatePage(page.id, { src, width: doc.width, height: doc.height });
     rt.toast(`Updated “${page.name}” in Simple.`);
   } else {
     const id = globalThis.crypto?.randomUUID?.() ?? String(Date.now());
     scanner.addPage({ id, name: doc.name, src, originalSrc: src, width: doc.width, height: doc.height, originalWidth: doc.width, originalHeight: doc.height, createdAt: Date.now() });
-    doc.sourceId = id;
+    rt.session.sourceId = id;
     rt.toast(`Added “${doc.name}” to Simple as a new page.`);
   }
   useScannerStore.getState().saveToDB();

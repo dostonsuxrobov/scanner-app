@@ -35,6 +35,7 @@ export class EditorSession {
     this.clipboard = null;
     this.listeners = { change: new Set(), pixels: new Set() };
     this.pending = null;
+    this.sourceId = null; // Simple page this image came from, if any
   }
 
   // --- subscriptions -------------------------------------------------------
@@ -56,8 +57,10 @@ export class EditorSession {
   }
 
   // --- document lifecycle --------------------------------------------------
-  open(doc) {
+  open(doc, { sourceId = null } = {}) {
     this.doc = doc;
+    this.sourceId = sourceId;
+    this.pending = null;
     this.selection = null;
     this.history.clear();
     this.savedRevision = 0;
@@ -88,10 +91,12 @@ export class EditorSession {
 
   // --- transactions --------------------------------------------------------
   // Start recording an edit. Capture pixel regions before changing them.
-  begin(label) {
+  // `merge`: a key; consecutive edits with the same key (and no pixel
+  // patches) within a moment become one undo step.
+  begin(label, { merge = null } = {}) {
     if (this.pending) this.end(this.pending);
     // Set `tx.damage` to a document rect (or false) to limit repainting.
-    const tx = { label, before: captureState(this), patches: [], damage: null };
+    const tx = { label, before: captureState(this), patches: [], damage: null, merge, done: false };
     tx.capture = (layer, rect) => {
       const patch = capturePatch(layer, rect);
       if (patch) tx.patches.push(patch);
@@ -100,21 +105,31 @@ export class EditorSession {
     return tx;
   }
   end(tx) {
+    // A transaction is recorded once, even if ended again (e.g. by a
+    // shortcut during a drag and then by the drag's release).
+    if (tx.done) return;
+    tx.done = true;
     if (this.pending === tx) this.pending = null;
+    if (!tx.patches.length && this.history.merge(tx.merge, Date.now())) {
+      this.emitChange(tx.damage);
+      return;
+    }
     const now = captureState(this);
     const bytes = stateBytes(tx.before, now) + tx.patches.reduce((n, p) => n + patchBytes(p), 0);
-    this.history.push({ label: tx.label, state: tx.before, patches: tx.patches, bytes });
+    this.history.push({ label: tx.label, state: tx.before, patches: tx.patches, bytes, mergeKey: tx.patches.length ? null : tx.merge, time: Date.now() });
     this.emitChange(tx.damage);
   }
   // Abandon an edit, restoring pixels and structure as they were.
   cancel(tx) {
+    if (tx.done) return;
+    tx.done = true;
     if (this.pending === tx) this.pending = null;
     this.applyEntry({ state: tx.before, patches: tx.patches });
     this.emitChange();
   }
   // Convenience wrapper for a synchronous edit.
-  edit(label, mutate, regions = []) {
-    const tx = this.begin(label);
+  edit(label, mutate, regions = [], options) {
+    const tx = this.begin(label, options);
     for (const [layer, rect] of regions) tx.capture(layer, rect);
     try {
       mutate(this.doc);
@@ -153,8 +168,8 @@ export class EditorSession {
   }
 
   // --- selection -----------------------------------------------------------
-  setSelection(selection, label = "Selection") {
-    const tx = this.begin(label);
+  setSelection(selection, label = "Selection", options) {
+    const tx = this.begin(label, options);
     tx.damage = false;
     this.selection = selection;
     this.end(tx);

@@ -28,7 +28,7 @@ export function buildMenus(rt, { pages, preferences }) {
         sep,
         item("save", "Save project", { hint: "Keeps layers and text editable" }),
         item("export", "Export image…", { hint: "PNG, JPEG, WebP, or PDF" }),
-        item("sendToScanner", doc?.sourceId ? "Update page in Simple" : "Add to Simple pages"),
+        item("sendToScanner", session.sourceId ? "Update page in Simple" : "Add to Simple pages"),
         sep,
         item("close", "Close image"),
       ],

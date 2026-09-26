@@ -115,7 +115,7 @@ export function createRectSelectTool() {
     setRect(rt, rect) {
       const shape = editableShape(rt);
       if (!shape || rect.w < 1 || rect.h < 1) return;
-      rt.session.setSelection(buildRectSelection(rt.session.doc, rect, shape, "replace", null), "Adjust selection");
+      rt.session.setSelection(buildRectSelection(rt.session.doc, rect, shape, "replace", null), "Adjust selection", { merge: "rect-fields" });
     },
 
     hideAnts() {

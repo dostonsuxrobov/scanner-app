@@ -3,6 +3,7 @@
 // layers keep them and can be moved back into view later.
 import { createCanvas } from "./canvas.js";
 import { intersect, isEmptyRect } from "./rect.js";
+import { moveLayerTo } from "./layer.js";
 
 export function cropDocument(doc, rect, { deletePixels = true } = {}) {
   for (const layer of doc.layers) {
@@ -14,11 +15,7 @@ export function cropDocument(doc, rect, { deletePixels = true } = {}) {
       layer.canvas = canvas;
       layer.x = isEmptyRect(keep) ? 0 : keep.x - rect.x;
       layer.y = isEmptyRect(keep) ? 0 : keep.y - rect.y;
-    } else {
-      layer.x -= rect.x;
-      layer.y -= rect.y;
-      if (layer.text) layer.text = { ...layer.text, anchor: { x: layer.text.anchor.x - rect.x, y: layer.text.anchor.y - rect.y } };
-    }
+    } else moveLayerTo(layer, layer.x - rect.x, layer.y - rect.y);
   }
   doc.width = rect.w;
   doc.height = rect.h;

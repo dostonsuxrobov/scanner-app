@@ -19,6 +19,14 @@ import { liftRect, liftSelection } from "./helpers/lift-selection.js";
 
 export function createTransformTool() {
   let drag = null; // { kind: handle | "move" | "rotate", start, original }
+  // Open transaction while selected pixels float in their own layer; it is
+  // recorded with the transform on apply, or rolled back on cancel.
+  let float = null;
+
+  function rollBackFloat(rt) {
+    if (float) rt.session.cancel(float);
+    float = null;
+  }
 
   const draftOf = (rt) => rt.store.getState().transform;
 
@@ -49,19 +57,22 @@ export function createTransformTool() {
       const selection = session.selection;
       if (selection?.count) {
         if (layer.alphaLocked) return rt.toast(`Unlock transparency of “${layer.name}” to transform selected pixels.`, true);
-        const tx = session.begin("Float selection");
-        tx.capture(layer, liftRect(layer, selection));
+        float = session.begin("Transform selection");
+        float.capture(layer, liftRect(layer, selection));
         layer = liftSelection(session.doc, layer, selection, { name: "Transformed pixels" });
         if (!layer) {
-          session.cancel(tx);
+          rollBackFloat(rt);
           return rt.toast("The selection does not cover any pixels of this layer.", true);
         }
         session.selection = null;
-        session.end(tx);
+        session.emitChange();
       }
       // Frame only the visible pixels, as Photoshop's Free Transform does.
       const bounds = contentBounds(layer.canvas);
-      if (!bounds) return rt.toast(`“${layer.name}” is empty — there is nothing to transform.`, true);
+      if (!bounds) {
+        rollBackFloat(rt);
+        return rt.toast(`“${layer.name}” has no visible pixels to transform.`, true);
+      }
       const whole = bounds.w === layer.canvas.width && bounds.h === layer.canvas.height;
       const source = whole ? layer.canvas : cropCanvas(layer.canvas, bounds);
       show(rt, createDraft(layer.id, source, layer.x + bounds.x, layer.y + bounds.y));
@@ -80,16 +91,20 @@ export function createTransformTool() {
       rt.store.setState({ transform: null });
       if (!layer || isIdentity(draft)) {
         rt.setLive(null);
+        rollBackFloat(rt); // nothing changed: put the pixels back where they were
         return true;
       }
       try {
         const result = rasterizeDraft(draft, { smoothing: rt.options("scale").smoothing });
         const before = layerBounds(layer);
-        session.edit("Transform", () => {
-          layer.canvas = result.canvas;
-          layer.x = result.x;
-          layer.y = result.y;
-        });
+        // The float is normally still open; if something else closed it, the
+        // transform gets its own undo step.
+        const tx = float && !float.done ? float : session.begin("Transform");
+        float = null;
+        layer.canvas = result.canvas;
+        layer.x = result.x;
+        layer.y = result.y;
+        session.end(tx);
         rt.setLive(null, union(before, layerBounds(layer)));
         return true;
       } catch (error) {
@@ -103,6 +118,13 @@ export function createTransformTool() {
       if (!draftOf(rt)) return;
       rt.store.setState({ transform: null });
       rt.setLive(null);
+      rollBackFloat(rt);
+    },
+
+    // The document is being replaced; forget any floating pixels.
+    reset() {
+      float = null;
+      drag = null;
     },
 
     activate(rt) {

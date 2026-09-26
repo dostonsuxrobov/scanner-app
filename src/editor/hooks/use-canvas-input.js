@@ -39,6 +39,7 @@ export function useCanvasInput(rt, ref) {
         if (touches.size === 2) {
           // A second finger turns a stroke into a pinch: abandon the stroke.
           if (mode === "tool") rt.tool?.cancel?.(rt);
+          rt.gestureActive = false;
           mode = "pinch";
           startPinch();
           return;
@@ -50,6 +51,7 @@ export function useCanvasInput(rt, ref) {
         pan = { x: event.clientX, y: event.clientY, view: rt.view.getState() };
       } else if (event.button === 0) {
         mode = "tool";
+        rt.gestureActive = true;
         const e = toolEvent(event, el, rt.view.getState());
         rt.tool?.down?.(rt, e);
       } else return;
@@ -94,6 +96,7 @@ export function useCanvasInput(rt, ref) {
         return;
       }
       if (mode === "tool") rt.tool?.up?.(rt, toolEvent(event, el, rt.view.getState()));
+      rt.gestureActive = false;
       mode = null;
       pan = null;
       if (el.hasPointerCapture(event.pointerId)) el.releasePointerCapture(event.pointerId);

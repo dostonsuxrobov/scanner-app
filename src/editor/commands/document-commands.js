@@ -4,9 +4,9 @@ import { fitsLimits, limitsMessage } from "../engine/limits.js";
 import { resetToolState } from "./reset-tool-state.js";
 import { fitToScreen } from "./view-commands.js";
 
-export function openDocument(rt, doc, selection = null) {
+export function openDocument(rt, doc, selection = null, { sourceId = null } = {}) {
   resetToolState(rt);
-  rt.session.open(doc);
+  rt.session.open(doc, { sourceId });
   rt.session.selection = selection;
   rt.tool?.activate?.(rt);
   fitToScreen(rt);
@@ -18,9 +18,7 @@ export function newImage(rt, { width, height, background, name = "Untitled" }) {
 }
 
 export function openCanvas(rt, canvas, name, { sourceId = null, layerName } = {}) {
-  const doc = documentFromCanvas(canvas, name, layerName);
-  doc.sourceId = sourceId;
-  openDocument(rt, doc);
+  openDocument(rt, documentFromCanvas(canvas, name, layerName), null, { sourceId });
 }
 
 export function closeDocument(rt) {

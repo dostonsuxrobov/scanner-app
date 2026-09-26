@@ -94,9 +94,12 @@ export function createTextTool() {
         if (rt.session.layer(layer.id) !== layer) return;
         const before = boundsOf(layer);
         const result = renderText(text);
-        rt.session.edit("Text style", () => {
-          Object.assign(layer, { canvas: result.canvas, x: result.x, y: result.y, text });
-        });
+        rt.session.edit(
+          "Text style",
+          () => Object.assign(layer, { canvas: result.canvas, x: result.x, y: result.y, text }),
+          [],
+          { merge: `text-style:${layer.id}` },
+        );
         rt.invalidate(union(before, boundsOf(layer)));
       });
     },

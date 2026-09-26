@@ -7,8 +7,11 @@ import * as image from "../commands/image-commands.js";
 import * as layer from "../commands/layer-commands.js";
 import * as view from "../commands/view-commands.js";
 import { guardUnsaved, closeDocument } from "../commands/document-commands.js";
+import { settle } from "../commands/settle.js";
 
 const dialog = (type) => (rt) => rt.store.getState().openDialog(type);
+// Dialogs that preview on the active layer need pending tool work finished.
+const layerDialog = (type) => (rt) => settle(rt) && rt.store.getState().openDialog(type);
 const needsDoc = (run) => (rt) => rt.session.hasDocument && run(rt);
 
 export const COMMANDS = {
@@ -31,10 +34,10 @@ export const COMMANDS = {
   selectNone: { keys: ["Mod+D", "Mod+Shift+A"], run: needsDoc(select.selectNone) },
   invertSelection: { keys: ["Mod+Shift+I"], run: needsDoc(select.invertSelection) },
   cropToSelection: { keys: [], run: needsDoc(image.cropToSelection) },
-  adjustColors: { keys: ["Mod+U"], run: needsDoc(dialog("adjust")) },
+  adjustColors: { keys: ["Mod+U"], run: needsDoc(layerDialog("adjust")) },
   desaturate: { keys: ["Mod+Shift+U"], run: needsDoc(image.desaturateLayer) },
   invertColors: { keys: ["Mod+I"], run: needsDoc(image.invertLayer) },
-  blur: { keys: [], run: needsDoc(dialog("blur")) },
+  blur: { keys: [], run: needsDoc(layerDialog("blur")) },
   newLayer: { keys: ["Mod+Alt+N"], run: needsDoc(layer.newLayer) },
   duplicateLayer: { keys: ["Mod+J"], run: needsDoc(layer.duplicateActiveLayer) },
   deleteLayer: { keys: [], run: needsDoc(layer.deleteActiveLayer) },

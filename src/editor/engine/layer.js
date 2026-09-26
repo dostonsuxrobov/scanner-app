@@ -64,3 +64,15 @@ export const layerBounds = (layer) => ({
 });
 
 export const isTextLayer = (layer) => !!layer?.text;
+
+// Positions a layer; editable text keeps its anchor in step so re-rendering
+// the text later does not snap it back. The text record is replaced, not
+// mutated, because undo snapshots share it.
+export function moveLayerTo(layer, x, y) {
+  const dx = x - layer.x;
+  const dy = y - layer.y;
+  layer.x = x;
+  layer.y = y;
+  if (layer.text && (dx || dy))
+    layer.text = { ...layer.text, anchor: { x: layer.text.anchor.x + dx, y: layer.text.anchor.y + dy } };
+}

@@ -1,10 +1,11 @@
 // Move tool: drags the active layer, the selected pixels (lifted into their
 // own layer), or only the selection outline. Shift locks to one axis.
-import { layerBounds } from "../engine/layer.js";
+import { layerBounds, moveLayerTo } from "../engine/layer.js";
 import { union } from "../engine/rect.js";
 import { translateSelection } from "../engine/selection/selection.js";
 import { liftRect, liftSelection } from "./helpers/lift-selection.js";
 import { pickLayer } from "./pick-layer.js";
+import { editableLayer } from "./helpers/editable-layer.js";
 
 function constrained(drag, e) {
   let dx = e.x - drag.start.x;
@@ -30,8 +31,14 @@ export function createMoveTool() {
       }
     }
     let layer = session.activeLayer;
-    const blocker = session.editBlocker(layer, { alpha: target === "pixels" });
-    if (blocker) return rt.toast(blocker, true);
+    if (target === "pixels") {
+      // Cutting pixels out of editable text converts it to a pixel layer first.
+      layer = editableLayer(rt, { alpha: true });
+      if (!layer) return;
+    } else {
+      const blocker = session.editBlocker(layer);
+      if (blocker) return rt.toast(blocker, true);
+    }
     let tx;
     const selection = session.selection;
     if (target === "pixels") {
@@ -70,8 +77,7 @@ export function createMoveTool() {
       if (drag.kind === "layer") {
         const layer = rt.session.layer(drag.layerId);
         const before = layerBounds(layer);
-        layer.x = drag.origin.x + drag.offset.dx;
-        layer.y = drag.origin.y + drag.offset.dy;
+        moveLayerTo(layer, drag.origin.x + drag.offset.dx, drag.origin.y + drag.offset.dy);
         rt.invalidate(union(before, layerBounds(layer)));
       } else rt.redrawOverlay();
     },
@@ -114,10 +120,7 @@ export function createMoveTool() {
         rt.toast(blocker, true);
         return true;
       }
-      session.edit("Nudge layer", () => {
-        layer.x += dx;
-        layer.y += dy;
-      });
+      session.edit("Nudge layer", () => moveLayerTo(layer, layer.x + dx, layer.y + dy), [], { merge: `nudge:${layer.id}` });
       return true;
     },
   };

@@ -33,6 +33,10 @@ export function useKeyboardShortcuts(rt, active) {
 
     function onKeyDown(event) {
       if (rt.store.getState().dialog || typingInto(event.target)) return;
+      if (rt.gestureActive) {
+        if (!event.repeat && event.key !== "Shift" && event.key !== "Alt") event.preventDefault();
+        return;
+      }
       if (event.key === " " && !event.repeat) {
         setSpace(true);
         event.preventDefault();
