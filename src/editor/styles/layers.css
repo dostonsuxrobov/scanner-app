@@ -1,0 +1,123 @@
+.ae-layers {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 220px;
+  border-bottom: 0;
+}
+.ae-layer-props {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  padding: 10px 14px;
+}
+.ae-layer-props select {
+  height: 28px;
+}
+.ae-opacity {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  align-items: center;
+  gap: 10px;
+}
+.ae-opacity .ae-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.ae-locks {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.ae-locks .ae-field-label {
+  margin-right: 4px;
+}
+.ae-layer-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 8px;
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ae-layer {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 4px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+.ae-layer:hover {
+  background: var(--ae-surface);
+}
+.ae-layer.is-active {
+  background: var(--ae-accent-soft);
+  border-color: #c7d7fe;
+}
+.ae-layer.is-drop {
+  border-top: 2px solid var(--ae-accent);
+}
+.ae-layer.is-hidden .ae-thumb,
+.ae-layer.is-hidden .ae-layer-name {
+  opacity: 0.45;
+}
+.ae-layer-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+.ae-thumb {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px var(--ae-border-strong);
+  background: repeating-conic-gradient(#e6e6e9 0% 25%, #fff 0% 50%) 50% / 8px 8px;
+}
+.ae-layer-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ae-layer-rename {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--ae-accent);
+  border-radius: 4px;
+  font: inherit;
+}
+.ae-layer-badges {
+  display: flex;
+  gap: 3px;
+  color: var(--ae-faint);
+}
+.ae-layer-rename-button {
+  border: 0;
+  background: transparent;
+  color: var(--ae-faint);
+  font-size: 10px !important;
+  padding: 2px 4px;
+  opacity: 0;
+}
+.ae-layer:hover .ae-layer-rename-button,
+.ae-layer-rename-button:focus-visible {
+  opacity: 1;
+}
+.ae-layer-actions {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-top: 1px solid var(--ae-border);
+}

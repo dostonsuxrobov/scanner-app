@@ -5,7 +5,8 @@ import { getWorker, terminateWorker } from "./lib/image-worker-client";
 import { processFiles } from "./lib/file-processor";
 import { exportSinglePage, exportAllAsPdf } from "./lib/export-pdf";
 import { useDropZone } from "./hooks/use-drop-zone";
-import { AdvancedEditor } from "./components/advanced-editor";
+import { AdvancedEditor } from "./editor/ui/advanced-editor.jsx";
+import { fileKind } from "./editor/engine/io/file-kind.js";
 import { Header } from "./components/header";
 import { PageSidebar } from "./components/page-sidebar";
 import { DocumentViewer } from "./components/document-viewer";
@@ -14,7 +15,7 @@ import { Dialog } from "./components/ui/dialog";
 
 export default function App() {
   const [advanced, setAdvanced] = useState(false);
-  const [editorSession, setEditorSession] = useState(0);
+  const editorRef = useRef(null);
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
@@ -73,8 +74,16 @@ export default function App() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // Drag and drop
-  const isDragging = useDropZone(addFiles);
+  // Drag and drop: into the editor while it is open, otherwise as pages.
+  const dropFiles = useCallback(
+    (files) => (advanced ? editorRef.current?.openFiles(files) : addFiles(files)),
+    [advanced, addFiles],
+  );
+  const acceptDrop = useCallback(
+    (file) => (advanced ? fileKind(file) !== "unknown" : file.type.startsWith("image/") || file.type === "application/pdf"),
+    [advanced],
+  );
+  const isDragging = useDropZone(dropFiles, acceptDrop);
 
   // Wait for canvas to finish drawing before reading pixels
   const waitForCanvas = useCallback(() => {
@@ -321,13 +330,7 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen w-full bg-background font-sans">
       <Header advanced={advanced} onToggleMode={() => setAdvanced((v) => !v)} />
-      <AdvancedEditor
-        key={editorSession}
-        visible={advanced}
-        autoOpenPage={editorSession === 0}
-        onFinish={() => setAdvanced(false)}
-        onRestart={() => setEditorSession((n) => n + 1)}
-      />
+      <AdvancedEditor ref={editorRef} visible={advanced} />
       <div
         className="flex-1 flex overflow-hidden"
         style={advanced ? { display: "none" } : undefined}
@@ -391,9 +394,13 @@ export default function App() {
               <polyline points="17 8 12 3 7 8" />
               <line x1="12" y1="3" x2="12" y2="15" />
             </svg>
-            <p className="text-lg font-medium">Drop files to add pages</p>
+            <p className="text-lg font-medium">
+              {advanced ? "Drop to open in the editor" : "Drop files to add pages"}
+            </p>
             <p className="text-sm text-muted-foreground">
-              Images and PDFs supported
+              {advanced
+                ? "Images, PDFs, and projects · added as layers when an image is open"
+                : "Images and PDFs supported"}
             </p>
           </div>
         </div>

@@ -1,0 +1,99 @@
+.ae-toolbox {
+  width: 48px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 0;
+  border-right: 1px solid var(--ae-border);
+  background: var(--ae-bg);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.ae-tool-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.ae-tool {
+  width: 36px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #3f3f46;
+}
+.ae-tool:hover {
+  background: var(--ae-hover);
+}
+.ae-tool[aria-pressed="true"] {
+  background: var(--ae-primary);
+  color: #fff;
+}
+.ae-tool-break {
+  width: 22px;
+  height: 1px;
+  margin: 5px 0;
+  background: var(--ae-border);
+}
+.ae-swatches {
+  position: relative;
+  width: 40px;
+  height: 44px;
+  margin-top: 10px;
+  flex-shrink: 0;
+}
+.ae-swatch {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+}
+.ae-swatch input {
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+.ae-swatch-fg {
+  top: 2px;
+  left: 2px;
+  z-index: 1;
+}
+.ae-swatch-bg {
+  top: 14px;
+  left: 14px;
+}
+.ae-swatch-swap,
+.ae-swatch-reset {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--ae-muted);
+}
+.ae-swatch-swap {
+  top: 0;
+  right: -2px;
+}
+.ae-swatch-reset {
+  bottom: 0;
+  left: 0;
+}
+@media (max-width: 640px) {
+  .ae-toolbox {
+    width: 42px;
+  }
+  .ae-tool {
+    width: 34px;
+  }
+}
