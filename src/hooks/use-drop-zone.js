@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 
-export function useDropZone(onFilesDropped) {
+const acceptsImagesAndPdfs = (f) => f.type.startsWith('image/') || f.type === 'application/pdf';
+
+export function useDropZone(onFilesDropped, accept = acceptsImagesAndPdfs) {
   const [isDragging, setIsDragging] = useState(false);
   let dragCounter = 0;
 
@@ -31,12 +33,10 @@ export function useDropZone(onFilesDropped) {
     dragCounter = 0;
     setIsDragging(false);
 
-    const files = Array.from(e.dataTransfer.files).filter(
-      (f) => f.type.startsWith('image/') || f.type === 'application/pdf',
-    );
+    const files = Array.from(e.dataTransfer.files).filter(accept);
 
     if (files.length > 0) onFilesDropped(files);
-  }, [onFilesDropped]);
+  }, [onFilesDropped, accept]);
 
   useEffect(() => {
     const d = document.documentElement;

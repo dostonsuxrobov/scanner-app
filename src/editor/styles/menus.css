@@ -1,0 +1,105 @@
+.ae-menubar {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+}
+.ae-menubar-slot {
+  position: relative;
+}
+.ae-menubar-button {
+  height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+}
+.ae-menubar-button:hover,
+.ae-menubar-button[aria-expanded="true"] {
+  background: var(--ae-hover);
+}
+.ae-menu {
+  position: absolute;
+  z-index: 70;
+  min-width: 250px;
+  margin-top: 4px;
+  padding: 5px;
+  border: 1px solid var(--ae-border);
+  border-radius: 8px;
+  background: var(--ae-bg);
+  box-shadow: var(--ae-shadow);
+}
+.ae-menubar-slot > .ae-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+}
+.ae-menu-entry {
+  position: relative;
+}
+.ae-submenu {
+  position: absolute;
+  top: -6px;
+  left: 100%;
+  margin: 0 0 0 2px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.ae-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 28px;
+  padding: 0 8px 0 4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  text-align: left;
+}
+.ae-menu-item:hover:not(:disabled),
+.ae-menu-item:focus-visible {
+  background: var(--ae-accent);
+  color: #fff;
+  outline: none;
+}
+.ae-menu-item:hover:not(:disabled) kbd,
+.ae-menu-item:focus-visible kbd {
+  color: rgba(255, 255, 255, 0.8);
+}
+.ae-menu-check {
+  width: 16px;
+  display: inline-grid;
+  place-items: center;
+}
+.ae-menu-label {
+  flex: 1;
+  white-space: nowrap;
+}
+.ae-menu-sep {
+  height: 1px;
+  margin: 5px 6px;
+  background: var(--ae-border);
+}
+.ae-menu-empty {
+  margin: 6px 10px;
+  color: var(--ae-faint);
+}
+.ae-menu-heading {
+  padding: 8px 8px 3px 26px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ae-faint);
+}
+.ae-menu-heading.is-sub {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+.ae-menu-compact {
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  min-width: 260px;
+}

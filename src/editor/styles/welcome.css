@@ -1,0 +1,95 @@
+.ae-welcome {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  display: flex;
+  padding: 24px;
+}
+.ae-welcome-card {
+  margin: auto;
+  max-width: 560px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.ae-welcome-icon {
+  width: 60px;
+  height: 60px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: var(--ae-bg);
+  border: 1px solid var(--ae-border);
+  margin-bottom: 18px;
+}
+.ae-welcome h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+.ae-welcome p {
+  margin: 0 0 20px;
+  color: var(--ae-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.ae-welcome-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.ae-welcome-actions .ae-button {
+  height: 36px;
+  padding: 0 16px;
+  font-size: 13px;
+}
+.ae-welcome-pages {
+  margin-top: 32px;
+  width: 100%;
+}
+.ae-welcome-pages h3 {
+  margin: 0 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ae-muted);
+}
+.ae-welcome-pages ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+}
+.ae-welcome-pages button {
+  width: 100%;
+  padding: 6px;
+  border: 1px solid var(--ae-border);
+  border-radius: 8px;
+  background: var(--ae-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ae-welcome-pages button:hover {
+  border-color: var(--ae-accent);
+}
+.ae-welcome-pages img {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: contain;
+  background: var(--ae-surface);
+  border-radius: 4px;
+}
+.ae-welcome-pages span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--ae-muted);
+}
