@@ -10,6 +10,7 @@ import { drawDashedPolygon } from "../overlay/marching-ants.js";
 import { drawHandles, handleCursor, handlePoints, hitHandle, pointInPolygon, rectCorners } from "../overlay/handles.js";
 import { drawLabel } from "../overlay/label.js";
 import { selectionMode } from "./helpers/selection-mode.js";
+import { selectionCursor } from "../overlay/selection-cursor.js";
 
 export function buildRectSelection(doc, rect, options, mode, base) {
   const r = roundRect(rect);
@@ -45,9 +46,11 @@ export function createRectSelectTool() {
     },
 
     cursor(rt, e) {
-      if (drag) return drag.handle && drag.handle !== "move" ? handleCursor(drag.handle) : "crosshair";
-      const h = e && !e.shift && !e.alt && !e.mod && rt.options("select").mode === "replace" ? hit(rt, e) : null;
-      return h === "move" ? "move" : h ? handleCursor(h) : "crosshair";
+      if (drag) return drag.handle && drag.handle !== "move" ? handleCursor(drag.handle) : selectionCursor(drag.mode);
+      const options = rt.options("select");
+      const h = e && !e.shift && !e.alt && !e.mod && options.mode === "replace" ? hit(rt, e) : null;
+      if (h) return h === "move" ? "move" : handleCursor(h);
+      return selectionCursor(e ? selectionMode(e, options.mode) : options.mode);
     },
 
     down(rt, e) {

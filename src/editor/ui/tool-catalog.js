@@ -3,9 +3,9 @@ import { Blend, Circle, Crop, Eraser, Move, Paintbrush, Pipette, Scaling, Square
 
 export const TOOL_CATALOG = [
   { id: "move", icon: Move, label: "Move", key: "V", hint: "Drag to move. Shift locks direction; arrow keys nudge." },
-  { id: "select", icon: SquareDashed, label: "Rectangle select", key: "M", hint: "Drag to select. Shift adds, Alt subtracts, both intersect. Drag handles to adjust." },
+  { id: "select", icon: SquareDashed, label: "Rectangle select", key: "M", hint: "Drag to select. Hold Shift to add (+), Ctrl to subtract (−), Ctrl+Shift to intersect. Drag handles to adjust." },
   { id: "scale", icon: Scaling, label: "Transform (scale, rotate, flip)", key: "Shift+S", hint: "Drag handles to scale, outside to rotate. Enter applies, Esc cancels." },
-  { id: "bycolor", icon: Blend, label: "Select by color", key: "Shift+O", hint: "Click a color, then drag left or right to change the threshold." },
+  { id: "bycolor", icon: Blend, label: "Select by color", key: "Shift+O", hint: "Click a color; drag left/right for threshold. Hold Shift to add (+), Ctrl to subtract (−), Ctrl+Shift to intersect." },
   { id: "brush", icon: Paintbrush, label: "Brush", key: "B", hint: "[ and ] change size. Shift-click draws a straight line; Alt-click picks a color." },
   { id: "eraser", icon: Eraser, label: "Eraser", key: "E", hint: "Erases to transparency. [ and ] change size." },
   { id: "text", icon: Type, label: "Text", key: "T", hint: "Click to type, drag for a text box, click text to edit. Ctrl+Enter commits." },

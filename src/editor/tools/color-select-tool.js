@@ -7,6 +7,7 @@ import { combineMasks, featherMask } from "../engine/selection/mask.js";
 import { createSelection } from "../engine/selection/selection.js";
 import { drawLabel } from "../overlay/label.js";
 import { selectionMode } from "./helpers/selection-mode.js";
+import { selectionCursor } from "../overlay/selection-cursor.js";
 import { createSampleSource } from "./sample-source.js";
 
 export function createColorSelectTool() {
@@ -34,7 +35,7 @@ export function createColorSelectTool() {
 
   return {
     id: "bycolor",
-    cursor: () => "crosshair",
+    cursor: (rt, e) => selectionCursor(e ? selectionMode(e, rt.options("bycolor").mode) : rt.options("bycolor").mode),
 
     down(rt, e) {
       const { session } = rt;
