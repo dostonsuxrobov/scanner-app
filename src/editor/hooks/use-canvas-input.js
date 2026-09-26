@@ -13,6 +13,7 @@ export function useCanvasInput(rt, ref) {
     let mode = null; // "tool" | "pan" | "pinch"
     let pan = null;
     let pinch = null;
+    let last = null; // latest tool event under the pointer
 
     const updateCursor = (e) => {
       if (mode === "pan" || rt.keys.space) el.style.cursor = mode === "pan" ? "grabbing" : "grab";
@@ -79,6 +80,7 @@ export function useCanvasInput(rt, ref) {
       }
       if (!rt.session.hasDocument) return;
       const e = toolEvent(event, el, view);
+      last = e;
       setPointer(e);
       if (mode === "tool") rt.tool?.move?.(rt, e);
       else rt.tool?.hover?.(rt, e);
@@ -105,11 +107,20 @@ export function useCanvasInput(rt, ref) {
 
     function onLeave() {
       if (mode) return;
+      last = null;
       rt.view.setState({ pointer: null });
       rt.tool?.leave?.(rt);
     }
 
     const onSpace = () => updateCursor();
+    // Pressing or releasing Shift/Ctrl/Alt changes the selection mode badge
+    // right away, without waiting for the mouse to move.
+    const onModifier = (event) => {
+      if (!last || mode === "pan" || !["Shift", "Control", "Meta", "Alt"].includes(event.key)) return;
+      updateCursor({ ...last, shift: event.shiftKey, alt: event.altKey, mod: event.ctrlKey || event.metaKey });
+    };
+    window.addEventListener("keydown", onModifier);
+    window.addEventListener("keyup", onModifier);
     el.addEventListener("pointerdown", onDown);
     el.addEventListener("pointermove", onMove);
     el.addEventListener("pointerup", onUp);
@@ -125,6 +136,8 @@ export function useCanvasInput(rt, ref) {
       el.removeEventListener("pointercancel", onUp);
       el.removeEventListener("pointerleave", onLeave);
       el.removeEventListener("editor-space", onSpace);
+      window.removeEventListener("keydown", onModifier);
+      window.removeEventListener("keyup", onModifier);
       el.removeEventListener("contextmenu", preventMenu);
     };
   }, [rt, ref]);
