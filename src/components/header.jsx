@@ -1,4 +1,4 @@
-import { ZoomIn, ZoomOut, ScanLine, Layers, ChevronsUpDown } from 'lucide-react';
+import { ZoomIn, ZoomOut, ScanLine, ChevronsUpDown } from 'lucide-react';
 import { Button } from './ui/button';
 import { useScannerStore } from '../store/scanner-store';
 
@@ -10,9 +10,10 @@ export function Header({ advanced = false, onToggleMode }) {
     <header className="h-14 border-b flex items-center justify-between px-6 bg-background/80 backdrop-blur-sm z-50">
       <button type="button" onClick={onToggleMode} aria-label={advanced ? 'Switch to Simple scanner' : 'Switch to Advanced editor'} aria-pressed={advanced} title={advanced ? 'Return to Simple scanner' : 'Open Advanced image editor'} className="flex items-center gap-2 rounded-lg px-2 py-1 -ml-2 hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
         <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-          {advanced ? <Layers className="w-5 h-5 text-primary-foreground" /> : <ScanLine className="w-5 h-5 text-primary-foreground" />}
+          <ScanLine className="w-5 h-5 text-primary-foreground" />
         </div>
-        <span className="font-semibold text-lg tracking-tight">{advanced ? 'advanced' : 'simple'}</span>
+        {/* The brand stays "simple" in both modes; the button only switches tools. */}
+        <span className="font-semibold text-lg tracking-tight">simple</span>
         <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground ml-1" />
       </button>
       {advanced ? <span className="text-xs text-muted-foreground">Image editor</span> : <div className="flex items-center border rounded-md">
