@@ -7,11 +7,11 @@ class WorkerManager {
     this.jobId = 0;
 
     this.worker.onmessage = (e) => {
-      const { id, success, result, error, width, height } = e.data;
+      const { id, success, result, error, width, height, info } = e.data;
       const job = this.pending.get(id);
       if (!job) return;
       this.pending.delete(id);
-      success ? job.resolve({ data: result, width, height }) : job.reject(new Error(error));
+      success ? job.resolve({ data: result, width, height, info }) : job.reject(new Error(error));
     };
   }
 
