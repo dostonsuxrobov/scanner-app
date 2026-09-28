@@ -153,11 +153,22 @@ export default function App() {
       const previous = { src: canvas.toDataURL("image/png"), width: canvas.width, height: canvas.height };
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-      const result = await getWorker().process("oneClickFix", {
-        imageData: imageData.data,
-        width: canvas.width,
-        height: canvas.height,
-      });
+      const result = await getWorker().process(
+        "oneClickFix",
+        {
+          imageData: imageData.data,
+          width: canvas.width,
+          height: canvas.height,
+          modelUrl: new URL("models/uvdoc-v1.onnx", document.baseURI).href,
+        },
+        ({ fraction }) =>
+          store.getState().setProcessing(
+            true,
+            fraction == null
+              ? "Downloading the page-flattening AI (first time only)..."
+              : `Downloading the page-flattening AI (first time only)... ${Math.round(fraction * 100)}%`,
+          ),
+      );
 
       const out = document.createElement("canvas");
       out.width = result.width;
@@ -173,12 +184,14 @@ export default function App() {
         width: result.width,
         height: result.height,
       });
-      const { straightened, paper } = result.info;
-      showToast(
-        straightened
-          ? `Page straightened${paper ? ` to ${paper}` : ""} and cleaned up`
-          : "Couldn't find the page edges — cleaned up the whole image",
-      );
+      const { method, paper, aiError } = result.info;
+      const size = paper ? ` to ${paper}` : "";
+      const message = {
+        curved: `Curved page flattened${size} and cleaned up`,
+        perspective: `Page straightened${size} and cleaned up`,
+        none: "Couldn't find the page — cleaned up the whole image",
+      }[method];
+      showToast(aiError ? `${message} (AI flattening unavailable: ${aiError})` : message, !!aiError && method === "none");
     } catch (err) {
       showToast(`One-click fix failed: ${err.message}`, true);
     } finally {

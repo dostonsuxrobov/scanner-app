@@ -76,9 +76,9 @@ test("odd proportions are kept and huge pages are capped", () => {
   assert.deepEqual([size.width, size.height], [3508, 3508]);
 });
 
-test("one-click fix straightens the page and makes shaded paper white with dark text", () => {
-  const out = oneClickFix(photo({ corners: tilted }), 800, 600);
-  assert.ok(out.straightened);
+test("one-click fix straightens the page and makes shaded paper white with dark text", async () => {
+  const out = await oneClickFix(photo({ corners: tilted }), 800, 600);
+  assert.equal(out.method, "perspective");
   assert.equal(out.paper, "A4");
   assert.ok(out.height > out.width);
   // In the shaded right part of the page, paper is now white and text dark.
@@ -89,19 +89,19 @@ test("one-click fix straightens the page and makes shaded paper white with dark 
   assert.ok(darkest(text, 0.2) < 60, `shaded ink is ${darkest(text, 0.2).toFixed(0)}`);
 });
 
-test("a colour cast on the paper is neutralised", () => {
+test("a colour cast on the paper is neutralised", async () => {
   // Warm (tungsten-like) light: blue is much weaker than red.
   const data = photo({ corners: tilted, shadow: 0.3 });
   for (let p = 0; p < data.length; p += 4) data[p + 2] *= 0.8;
-  const out = oneClickFix(data, 800, 600);
+  const out = await oneClickFix(data, 800, 600);
   const [cx, cy] = [Math.floor(out.width * 0.95), Math.floor(out.height * 0.5)];
   const p = (cy * out.width + cx) * 4;
   assert.ok(Math.abs(out.data[p] - out.data[p + 2]) <= 6, `paper is rgb(${out.data[p]}, ${out.data[p + 1]}, ${out.data[p + 2]})`);
 });
 
-test("without page edges the whole photo is cleaned in place", () => {
+test("without page edges the whole photo is cleaned in place", async () => {
   const data = photo({ corners: [{ x: -2, y: -2 }, { x: 802, y: -2 }, { x: 802, y: 602 }, { x: -2, y: 602 }] });
-  const out = oneClickFix(data, 800, 600);
-  assert.equal(out.straightened, false);
+  const out = await oneClickFix(data, 800, 600);
+  assert.equal(out.method, "none");
   assert.deepEqual([out.width, out.height], [800, 600]);
 });

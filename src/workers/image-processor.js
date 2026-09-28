@@ -3,6 +3,7 @@
 // ============================================================
 import { applyPerspectiveTransform } from '../lib/document/perspective.js';
 import { oneClickFix } from '../lib/document/one-click-fix.js';
+import { uvdocPredictor } from '../lib/document/uvdoc-model.js';
 
 // ---- SCAN STEP ----
 // One incremental pass: desaturate to grayscale, then stretch
@@ -30,7 +31,7 @@ function scanStep(data, w, h) {
 // MESSAGE HANDLER
 // ============================================================
 
-self.onmessage = function (e) {
+self.onmessage = async function (e) {
   const { type, id, data } = e.data;
   try {
     if (type === 'scan') {
@@ -47,10 +48,13 @@ self.onmessage = function (e) {
         self.postMessage({ id, success: false, error: 'Transform failed — invalid polygon' });
       }
     } else if (type === 'oneClickFix') {
-      const fixed = oneClickFix(data.imageData, data.width, data.height);
+      const { imageData, width, height, modelUrl } = data;
+      const onProgress = (fraction) => self.postMessage({ id, progress: { stage: 'download', fraction } });
+      const predictGrid = modelUrl ? uvdocPredictor(imageData, width, height, { modelUrl, onProgress }) : null;
+      const fixed = await oneClickFix(imageData, width, height, { predictGrid });
       self.postMessage({
         id, success: true, result: fixed.data, width: fixed.width, height: fixed.height,
-        info: { straightened: fixed.straightened, paper: fixed.paper },
+        info: { method: fixed.method, paper: fixed.paper, aiError: fixed.aiError },
       }, [fixed.data.buffer]);
     }
   } catch (err) {
