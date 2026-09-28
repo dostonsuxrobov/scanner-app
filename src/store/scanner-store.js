@@ -39,11 +39,12 @@ export const useScannerStore = create((set, get) => ({
       rightPanelOpen: true,
     }));
   },
-  pushEnhanceHistory: (src) =>
+  // Entries are { src, width, height } so undoing a crop restores the size.
+  pushEnhanceHistory: (entry) =>
     set((s) => ({
       enhanceHistory: s.enhanceHistory.length >= 20
-        ? [...s.enhanceHistory.slice(1), src]
-        : [...s.enhanceHistory, src],
+        ? [...s.enhanceHistory.slice(1), entry]
+        : [...s.enhanceHistory, entry],
     })),
   popEnhanceHistory: () =>
     set((s) => ({ enhanceHistory: s.enhanceHistory.slice(0, -1) })),

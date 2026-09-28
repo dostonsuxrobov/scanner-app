@@ -7,18 +7,19 @@ class WorkerManager {
     this.jobId = 0;
 
     this.worker.onmessage = (e) => {
-      const { id, success, result, error, width, height } = e.data;
+      const { id, success, result, error, width, height, info, progress } = e.data;
       const job = this.pending.get(id);
       if (!job) return;
+      if (progress) return job.onProgress?.(progress);
       this.pending.delete(id);
-      success ? job.resolve({ data: result, width, height }) : job.reject(new Error(error));
+      success ? job.resolve({ data: result, width, height, info }) : job.reject(new Error(error));
     };
   }
 
-  process(type, data) {
+  process(type, data, onProgress) {
     return new Promise((resolve, reject) => {
       const id = ++this.jobId;
-      this.pending.set(id, { resolve, reject });
+      this.pending.set(id, { resolve, reject, onProgress });
       this.worker.postMessage({ type, id, data });
     });
   }

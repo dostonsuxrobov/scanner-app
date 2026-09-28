@@ -17,6 +17,7 @@
     "clsx": "^2.1.1",
     "jspdf": "^4.1.0",
     "lucide-react": "^0.563.0",
+    "onnxruntime-web": "^1.30.0",
     "pdfjs-dist": "^5.4.624",
     "postcss": "^8.5.6",
     "react": "^18.3.1",

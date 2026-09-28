@@ -15,7 +15,7 @@ const TABS = [
   { id: 'export', icon: Download, label: 'Export' },
 ];
 
-export function ToolsPanel({ onScanStep, onStepBack, onResetAll, onExecuteCrop, onUndo, onClearPaint, onExport, onExportAll }) {
+export function ToolsPanel({ onScanStep, onStepBack, onOneClickFix, onResetAll, onExecuteCrop, onUndo, onClearPaint, onExport, onExportAll }) {
   const rightPanelOpen = useScannerStore((s) => s.rightPanelOpen);
   const setRightPanelOpen = useScannerStore((s) => s.setRightPanelOpen);
   const activeTool = useScannerStore((s) => s.activeTool);
@@ -49,7 +49,7 @@ export function ToolsPanel({ onScanStep, onStepBack, onResetAll, onExecuteCrop, 
         <Separator />
         {rightPanelOpen && activePage && (
           <div className="p-4 space-y-4">
-            {activeTool === 'enhance' && <EnhanceTool onScanStep={onScanStep} onStepBack={onStepBack} />}
+            {activeTool === 'enhance' && <EnhanceTool onScanStep={onScanStep} onStepBack={onStepBack} onOneClickFix={onOneClickFix} />}
             {activeTool === 'edit' && <CropTool onExecuteCrop={onExecuteCrop} />}
             {activeTool === 'paint' && <PaintTool onUndo={onUndo} onClearAll={onClearPaint} />}
             {activeTool === 'export' && <ExportTool onExport={onExport} onExportAll={onExportAll} />}

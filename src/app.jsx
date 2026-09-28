@@ -128,7 +128,7 @@ export default function App() {
         0,
         0,
       );
-      store.getState().pushEnhanceHistory(previousSrc);
+      store.getState().pushEnhanceHistory({ src: previousSrc, width: canvas.width, height: canvas.height });
       store
         .getState()
         .updatePage(page.id, { src: canvas.toDataURL("image/png") });
@@ -139,13 +139,73 @@ export default function App() {
     }
   }, []);
 
-  // Step back: restore the page to the state before the last scan
+  // One-click fix: find the page's edges, straighten it, and clean it up.
+  const handleOneClickFix = useCallback(async () => {
+    const page = store.getState().activePage();
+    if (!page) return;
+
+    store.getState().setProcessing(true, "Finding the page and cleaning it up...");
+    try {
+      await waitForCanvas();
+
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext("2d");
+      const previous = { src: canvas.toDataURL("image/png"), width: canvas.width, height: canvas.height };
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+      const result = await getWorker().process(
+        "oneClickFix",
+        {
+          imageData: imageData.data,
+          width: canvas.width,
+          height: canvas.height,
+          modelUrl: new URL("models/uvdoc-v1.onnx", document.baseURI).href,
+        },
+        ({ fraction }) =>
+          store.getState().setProcessing(
+            true,
+            fraction == null
+              ? "Downloading the page-flattening AI (first time only)..."
+              : `Downloading the page-flattening AI (first time only)... ${Math.round(fraction * 100)}%`,
+          ),
+      );
+
+      const out = document.createElement("canvas");
+      out.width = result.width;
+      out.height = result.height;
+      out.getContext("2d").putImageData(
+        new ImageData(new Uint8ClampedArray(result.data), result.width, result.height),
+        0,
+        0,
+      );
+      store.getState().pushEnhanceHistory(previous);
+      store.getState().updatePage(page.id, {
+        src: out.toDataURL("image/png"),
+        width: result.width,
+        height: result.height,
+      });
+      const { method, paper, aiError } = result.info;
+      const size = paper ? ` to ${paper}` : "";
+      const message = {
+        curved: `Curved page flattened${size} and cleaned up`,
+        perspective: `Page straightened${size} and cleaned up`,
+        none: "Couldn't find the page — cleaned up the whole image",
+      }[method];
+      showToast(aiError ? `${message} (AI flattening unavailable: ${aiError})` : message, !!aiError && method === "none");
+    } catch (err) {
+      showToast(`One-click fix failed: ${err.message}`, true);
+    } finally {
+      store.getState().setProcessing(false);
+    }
+  }, []);
+
+  // Step back: undo the last Scan or One-click fix (including its crop)
   const handleStepBack = useCallback(() => {
     const s = store.getState();
     const page = s.activePage();
     if (!page || s.enhanceHistory.length === 0) return;
-    const previousSrc = s.enhanceHistory[s.enhanceHistory.length - 1];
-    store.getState().updatePage(page.id, { src: previousSrc });
+    const previous = s.enhanceHistory[s.enhanceHistory.length - 1];
+    store.getState().updatePage(page.id, { src: previous.src, width: previous.width, height: previous.height });
     store.getState().popEnhanceHistory();
   }, []);
 
@@ -349,6 +409,7 @@ export default function App() {
         <ToolsPanel
           onScanStep={handleScanStep}
           onStepBack={handleStepBack}
+          onOneClickFix={handleOneClickFix}
           onResetAll={handleResetAll}
           onExecuteCrop={handleExecuteCrop}
           onUndo={handleUndo}
