@@ -87,8 +87,6 @@ export function createPaintTool(id) {
 
     move(rt, e) {
       hover = e;
-      // The brush outline follows the pointer while painting, not just hovering.
-      rt.redrawOverlay();
       if (!stroke) return;
       const layer = rt.session.layer(stroke.layerId);
       const dabs = [];
@@ -98,12 +96,10 @@ export function createPaintTool(id) {
 
     hover(rt, e) {
       hover = e;
-      rt.redrawOverlay();
     },
 
-    leave(rt) {
+    leave() {
       hover = null;
-      rt.redrawOverlay();
     },
 
     up(rt) {

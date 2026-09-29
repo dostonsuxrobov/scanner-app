@@ -30,8 +30,15 @@ export function createTransformTool() {
 
   const draftOf = (rt) => rt.store.getState().transform;
 
-  function show(rt, draft, previous = null) {
+  // Every change to the pending transform (pointer, options panel, keys) goes
+  // through here, so its frame and handles always match the preview.
+  function setDraft(rt, draft) {
     rt.store.setState({ transform: draft });
+    rt.redrawOverlay();
+  }
+
+  function show(rt, draft, previous = null) {
+    setDraft(rt, draft);
     const smoothing = rt.options("scale").smoothing;
     const damage = previous ? union(draftBounds(previous), draftBounds(draft)) : null;
     rt.setLive({ transform: { layerId: draft.layerId, source: draft.source, matrix: draftMatrix(draft), smoothing } }, damage);
@@ -88,7 +95,7 @@ export function createTransformTool() {
       if (!draft) return true;
       const { session } = rt;
       const layer = session.layer(draft.layerId);
-      rt.store.setState({ transform: null });
+      setDraft(rt, null);
       if (!layer || isIdentity(draft)) {
         rt.setLive(null);
         rollBackFloat(rt); // nothing changed: put the pixels back where they were
@@ -109,14 +116,14 @@ export function createTransformTool() {
         return true;
       } catch (error) {
         rt.toast(error.message, true);
-        rt.store.setState({ transform: draft });
+        setDraft(rt, draft);
         return false;
       }
     },
 
     discard(rt) {
       if (!draftOf(rt)) return;
-      rt.store.setState({ transform: null });
+      setDraft(rt, null);
       rt.setLive(null);
       rollBackFloat(rt);
     },

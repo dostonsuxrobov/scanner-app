@@ -1,5 +1,7 @@
 // Routes pointer input on the viewport: navigation first (Space/middle-drag
-// pans, two fingers pinch-zoom), then the active tool.
+// pans, two fingers pinch-zoom), then the active tool. Tools draw their
+// frames, handles, and readouts on the overlay from their own state, so the
+// overlay is repainted after every event a tool handles (once per frame).
 import { useEffect } from "react";
 import { clampZoom, zoomAt } from "../engine/view/viewport.js";
 import { setView } from "../commands/view-commands.js";
@@ -18,6 +20,11 @@ export function useCanvasInput(rt, ref) {
     const updateCursor = (e) => {
       if (mode === "pan" || rt.keys.space) el.style.cursor = mode === "pan" ? "grabbing" : "grab";
       else el.style.cursor = rt.session.hasDocument ? rt.tool?.cursor?.(rt, e) ?? "default" : "default";
+    };
+
+    const toTool = (method, e) => {
+      rt.tool?.[method]?.(rt, e);
+      rt.redrawOverlay();
     };
 
     const setPointer = (e) => rt.view.setState({ pointer: rt.session.hasDocument ? { x: e.x, y: e.y } : null });
@@ -39,7 +46,7 @@ export function useCanvasInput(rt, ref) {
         touches.set(event.pointerId, { x: event.clientX - rect.left, y: event.clientY - rect.top });
         if (touches.size === 2) {
           // A second finger turns a stroke into a pinch: abandon the stroke.
-          if (mode === "tool") rt.tool?.cancel?.(rt);
+          if (mode === "tool") toTool("cancel");
           rt.gestureActive = false;
           mode = "pinch";
           startPinch();
@@ -54,7 +61,7 @@ export function useCanvasInput(rt, ref) {
         mode = "tool";
         rt.gestureActive = true;
         const e = toolEvent(event, el, rt.view.getState());
-        rt.tool?.down?.(rt, e);
+        toTool("down", e);
       } else return;
       el.setPointerCapture(event.pointerId);
       updateCursor();
@@ -82,8 +89,7 @@ export function useCanvasInput(rt, ref) {
       const e = toolEvent(event, el, view);
       last = e;
       setPointer(e);
-      if (mode === "tool") rt.tool?.move?.(rt, e);
-      else rt.tool?.hover?.(rt, e);
+      toTool(mode === "tool" ? "move" : "hover", e);
       updateCursor(e);
     }
 
@@ -97,7 +103,7 @@ export function useCanvasInput(rt, ref) {
         if (!touches.size) mode = null;
         return;
       }
-      if (mode === "tool") rt.tool?.up?.(rt, toolEvent(event, el, rt.view.getState()));
+      if (mode === "tool") toTool("up", toolEvent(event, el, rt.view.getState()));
       rt.gestureActive = false;
       mode = null;
       pan = null;
@@ -109,7 +115,7 @@ export function useCanvasInput(rt, ref) {
       if (mode) return;
       last = null;
       rt.view.setState({ pointer: null });
-      rt.tool?.leave?.(rt);
+      toTool("leave");
     }
 
     const onSpace = () => updateCursor();
