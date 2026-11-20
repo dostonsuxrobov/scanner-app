@@ -23,7 +23,8 @@ export async function exportImage(doc, { format = "png", quality = 0.92, backgro
     format: [canvas.width, canvas.height],
     hotfixes: ["px_scaling"],
   });
-  pdf.addImage(toPdfJpeg(canvas, quality), "JPEG", 0, 0, canvas.width, canvas.height);
+  // The dialog already lets the user pick quality and scale, so honor them exactly.
+  pdf.addImage(toPdfJpeg(canvas, { quality, maxLongEdge: Infinity }), "JPEG", 0, 0, canvas.width, canvas.height);
   return pdf.output("blob");
 }
 
