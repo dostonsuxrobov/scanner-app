@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { showToast } from './utils';
+import { toPdfJpeg } from './pdf/pdf-page-image';
 
 export function exportSinglePage(canvas, name, type) {
   try {
@@ -17,7 +18,7 @@ export function exportSinglePage(canvas, name, type) {
         unit: 'px',
         format: [canvas.width, canvas.height],
       });
-      doc.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+      doc.addImage(toPdfJpeg(canvas), 'JPEG', 0, 0, canvas.width, canvas.height);
       doc.save(`doc-${name}.pdf`);
       showToast('Exported as PDF');
     }
@@ -46,7 +47,7 @@ export async function exportAllAsPdf(pages, onProgress) {
     } else {
       doc.addPage([page.width, page.height], orient);
     }
-    doc.addImage(page.src, 'PNG', 0, 0, page.width, page.height);
+    doc.addImage(toPdfJpeg(img), 'JPEG', 0, 0, page.width, page.height);
   }
 
   doc.save('document-all-pages.pdf');
