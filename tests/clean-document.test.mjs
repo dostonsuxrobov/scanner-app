@@ -69,3 +69,22 @@ test("content reaching past the edge band is kept", () => {
   assert.equal(data[(150 * 300 + 0) * 4], 20);
   assert.equal(data[(300 * 300 + 160) * 4], 0);
 });
+
+test("a tinted area keeps its color; a shadow across the paper is still removed", () => {
+  // Paper lit unevenly (darker and bluer towards the right) with a pale blue
+  // band, like a tinted table row, across the middle.
+  const w = 600, h = 800;
+  const light = (x) => 1 - 0.4 * (x / w);
+  const data = page(w, h, (x, y) => {
+    const tinted = x >= 100 && x < 500 && y >= 360 && y < 440;
+    const [r, g, b] = tinted ? [170, 195, 230] : [235, 235, 235];
+    return [r * light(x), g * light(x), b * light(x) * (1 + 0.06 * (x / w))];
+  });
+  cleanDocument(data, w, h);
+  const at = (x, y) => [...data.subarray((y * w + x) * 4, (y * w + x) * 4 + 3)];
+  for (const [x, y] of [[40, 40], [560, 40], [40, 760], [560, 760]]) assert.deepEqual(at(x, y), [255, 255, 255], `paper at ${x},${y}`);
+  for (const [x, y] of [[200, 400], [300, 400], [400, 400]]) {
+    const [r, , b] = at(x, y);
+    assert.ok(b - r > 30 && r < 215, `tint at ${x},${y} came out ${at(x, y)}`);
+  }
+});
