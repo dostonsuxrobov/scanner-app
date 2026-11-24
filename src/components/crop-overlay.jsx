@@ -2,9 +2,10 @@ import { AlertCircle } from 'lucide-react';
 import { useScannerStore } from '../store/scanner-store';
 import { isValidPolygon } from '../lib/utils';
 
-export { isValidPolygon };
-
-export function CropOverlay({ viewerRef }) {
+// The crop frame: four draggable corners over the page. Corners are kept in
+// page pixels, so the frame stays on the same part of the page at any zoom;
+// `scale` is screen pixels per page pixel.
+export function CropOverlay({ scale, width, height }) {
   const cropPoints = useScannerStore((s) => s.cropPoints);
   const cropMode = useScannerStore((s) => s.cropMode);
   const setCropPoints = useScannerStore((s) => s.setCropPoints);
@@ -12,34 +13,30 @@ export function CropOverlay({ viewerRef }) {
   if (!cropMode || !cropPoints) return null;
 
   const valid = isValidPolygon(cropPoints);
-  const pathData = `M ${cropPoints[0].x} ${cropPoints[0].y} L ${cropPoints[1].x} ${cropPoints[1].y} L ${cropPoints[2].x} ${cropPoints[2].y} L ${cropPoints[3].x} ${cropPoints[3].y} Z`;
+  const pts = cropPoints.map((p) => ({ x: p.x * scale, y: p.y * scale }));
+  const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const pathData = `M ${pts.map((p) => `${p.x} ${p.y}`).join(' L ')} Z`;
   const strokeColor = valid ? 'hsl(240,5.9%,10%)' : 'hsl(0,84.2%,60.2%)';
 
-  const handleMouseDown = (index, e) => {
-    e.preventDefault();
-    e.stopPropagation();
+  // Each corner follows the pointer that grabbed it (mouse, pen or finger).
+  const drag = (index) => ({
+    onPointerDown: (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.currentTarget.setPointerCapture(e.pointerId);
+    },
+    onPointerMove: (e) => {
+      if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+      const rect = e.currentTarget.parentElement.getBoundingClientRect();
+      const point = {
+        x: Math.max(0, Math.min(width, (e.clientX - rect.left) / scale)),
+        y: Math.max(0, Math.min(height, (e.clientY - rect.top) / scale)),
+      };
+      setCropPoints((prev) => prev.map((p, i) => (i === index ? point : p)));
+    },
+  });
 
-    const onMove = (ev) => {
-      const rect = viewerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      setCropPoints((prev) => {
-        const pts = [...prev];
-        pts[index] = {
-          x: Math.max(0, Math.min(ev.clientX - rect.left, rect.width)),
-          y: Math.max(0, Math.min(ev.clientY - rect.top, rect.height)),
-        };
-        return pts;
-      });
-    };
-
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  };
+  const guide = (a, b) => <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={strokeColor} strokeWidth="1" strokeDasharray="4,4" opacity="0.5" />;
 
   return (
     <div className="absolute inset-0 z-20">
@@ -52,11 +49,11 @@ export function CropOverlay({ viewerRef }) {
         </defs>
         <rect width="100%" height="100%" fill="rgba(0,0,0,0.4)" mask="url(#cropMask)" />
         <path d={pathData} fill="none" stroke={strokeColor} strokeWidth="2" />
-        <line x1={(cropPoints[0].x + cropPoints[1].x) / 2} y1={(cropPoints[0].y + cropPoints[1].y) / 2} x2={(cropPoints[3].x + cropPoints[2].x) / 2} y2={(cropPoints[3].y + cropPoints[2].y) / 2} stroke={strokeColor} strokeWidth="1" strokeDasharray="4,4" opacity="0.5" />
-        <line x1={(cropPoints[0].x + cropPoints[3].x) / 2} y1={(cropPoints[0].y + cropPoints[3].y) / 2} x2={(cropPoints[1].x + cropPoints[2].x) / 2} y2={(cropPoints[1].y + cropPoints[2].y) / 2} stroke={strokeColor} strokeWidth="1" strokeDasharray="4,4" opacity="0.5" />
+        {guide(mid(pts[0], pts[1]), mid(pts[3], pts[2]))}
+        {guide(mid(pts[0], pts[3]), mid(pts[1], pts[2]))}
       </svg>
-      {cropPoints.map((point, i) => (
-        <div key={i} className="crop-handle" style={{ left: point.x, top: point.y }} onMouseDown={(e) => handleMouseDown(i, e)} tabIndex={0} role="slider" aria-label={`Crop corner ${i + 1}`} />
+      {pts.map((point, i) => (
+        <div key={i} className="crop-handle" style={{ left: point.x, top: point.y }} {...drag(i)} role="slider" aria-label={`Crop corner ${i + 1}`} />
       ))}
       {!valid && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-destructive text-destructive-foreground px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-2">

@@ -1,17 +1,19 @@
-import { Undo2, Eraser, Paintbrush, Stamp, Target } from 'lucide-react';
+import { Undo2, Paintbrush, Stamp, Target } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/button';
 import { cn } from '../../lib/utils';
 import { useScannerStore } from '../../store/scanner-store';
-import { MAX_UNDO_STATES } from '../../lib/utils';
 import { ColorPicker } from '../ui/color-picker';
 
-export function PaintTool({ onUndo, onClearAll }) {
+export function PaintTool({ onUndo }) {
   const brushColor = useScannerStore((s) => s.brushColor);
   const setBrushColor = useScannerStore((s) => s.setBrushColor);
   const brushSize = useScannerStore((s) => s.brushSize);
   const setBrushSize = useScannerStore((s) => s.setBrushSize);
-  const paintHistory = useScannerStore((s) => s.paintHistory);
+  const steps = useScannerStore((s) => s.history.length);
+  const isProcessing = useScannerStore((s) => s.isProcessing);
+  const picking = useScannerStore((s) => s.pickingCloneSource);
+  const setPicking = useScannerStore((s) => s.setPickingCloneSource);
   const paintMode = useScannerStore((s) => s.paintMode);
   const setPaintMode = useScannerStore((s) => s.setPaintMode);
   const cloneSource = useScannerStore((s) => s.cloneSource);
@@ -24,7 +26,7 @@ export function PaintTool({ onUndo, onClearAll }) {
         <p className="text-xs text-muted-foreground">
           {paintMode === 'brush'
             ? 'Pick any color from the wheel; drag the slider for darker shades. Ctrl+Z to undo.'
-            : 'Alt+click to set source point, then drag to paint cloned pixels. Ctrl+Z to undo.'}
+            : 'Set a source point (Alt+click, or Pick source and then tap the image), then drag to paint cloned pixels. Ctrl+Z to undo.'}
         </p>
       </div>
 
@@ -62,21 +64,18 @@ export function PaintTool({ onUndo, onClearAll }) {
       {paintMode === 'clone' && (
         <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs flex items-center gap-2">
           <Target className={cn('w-4 h-4 shrink-0', cloneSource ? 'text-primary' : 'text-muted-foreground')} />
-          {cloneSource ? (
-            <>
-              <span className="flex-1">
-                Source set at <span className="font-mono">{Math.round(cloneSource.x)}, {Math.round(cloneSource.y)}</span>
-              </span>
-              <button
-                onClick={() => setCloneSource(null)}
-                className="text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
-              >
-                Reset
-              </button>
-            </>
-          ) : (
-            <span className="flex-1 text-muted-foreground">Alt+click on the image to set source.</span>
-          )}
+          <span className={cn('flex-1', !cloneSource && 'text-muted-foreground')}>
+            {picking ? 'Tap the image where to copy from.' : cloneSource ? (
+              <>Source set at <span className="font-mono">{Math.round(cloneSource.x)}, {Math.round(cloneSource.y)}</span></>
+            ) : 'No source point yet.'}
+          </span>
+          <button
+            onClick={() => setPicking(!picking)}
+            aria-pressed={picking}
+            className={cn('underline-offset-2 hover:underline', picking ? 'text-primary font-medium' : 'text-muted-foreground hover:text-foreground')}
+          >
+            {picking ? 'Cancel' : 'Pick source'}
+          </button>
         </div>
       )}
 
@@ -85,15 +84,10 @@ export function PaintTool({ onUndo, onClearAll }) {
         <input id="brush-size" type="range" min="1" max="50" value={brushSize} onChange={(e) => setBrushSize(+e.target.value)} className="w-full accent-primary" />
       </div>
       <Separator />
-      <div className="space-y-2">
-        <Button variant="outline" className="w-full" onClick={onUndo} disabled={paintHistory.length === 0}>
-          <Undo2 className="w-4 h-4 mr-2" /> Undo Stroke
-          {paintHistory.length > 0 && <span className="ml-auto text-xs text-muted-foreground">({paintHistory.length}/{MAX_UNDO_STATES})</span>}
-        </Button>
-        <Button variant="ghost" className="w-full text-destructive hover:text-destructive hover:bg-destructive/10" onClick={onClearAll}>
-          <Eraser className="w-4 h-4 mr-2" /> Clear All Paint
-        </Button>
-      </div>
+      <Button variant="outline" className="w-full" onClick={onUndo} disabled={isProcessing || steps === 0}>
+        <Undo2 className="w-4 h-4 mr-2" /> Undo
+        {steps > 0 && <span className="ml-auto text-xs text-muted-foreground">({steps})</span>}
+      </Button>
     </div>
   );
 }

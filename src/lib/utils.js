@@ -5,20 +5,23 @@ export const cn = (...inputs) => twMerge(clsx(inputs));
 
 export const MAX_FILE_SIZE = 50 * 1024 * 1024;
 export const MAX_PDF_PAGES = 100;
-export const MAX_UNDO_STATES = 10;
+
+let toastTimer = null;
 
 export function showToast(message, isError = false) {
   const toast = document.getElementById('toast');
   if (!toast) return;
   toast.textContent = message;
   toast.className = `toast show${isError ? ' error' : ''}`;
-  setTimeout(() => {
+  // A newer message keeps its full time; the previous one's timer must not hide it early.
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
     toast.className = 'toast';
   }, 3000);
 }
 
 export function makeId() {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
 export function isValidPolygon(points) {

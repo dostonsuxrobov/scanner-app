@@ -1,11 +1,17 @@
+// Runs image jobs in a Web Worker, one promise per job. If the worker dies
+// (out of memory on a huge image, a script error), every waiting job fails
+// with a message and a fresh worker is started for the next one.
 import WorkerScript from '../workers/image-processor.js?worker';
 
 class WorkerManager {
   constructor() {
-    this.worker = new WorkerScript();
     this.pending = new Map();
     this.jobId = 0;
+    this.start();
+  }
 
+  start() {
+    this.worker = new WorkerScript();
     this.worker.onmessage = (e) => {
       const { id, success, result, error, width, height, info, progress } = e.data;
       const job = this.pending.get(id);
@@ -13,6 +19,14 @@ class WorkerManager {
       if (progress) return job.onProgress?.(progress);
       this.pending.delete(id);
       success ? job.resolve({ data: result, width, height, info }) : job.reject(new Error(error));
+    };
+    this.worker.onerror = (e) => {
+      e.preventDefault?.();
+      this.worker.terminate();
+      const jobs = [...this.pending.values()];
+      this.pending.clear();
+      this.start();
+      for (const job of jobs) job.reject(new Error('the image processor stopped (the image may be too large for this device)'));
     };
   }
 

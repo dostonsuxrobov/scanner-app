@@ -2,9 +2,9 @@ import { Wand2, Undo2, ScanLine } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useScannerStore } from '../../store/scanner-store';
 
-export function EnhanceTool({ onScanStep, onStepBack, onOneClickFix }) {
+export function EnhanceTool({ onScanStep, onUndo, onOneClickFix }) {
   const isProcessing = useScannerStore((s) => s.isProcessing);
-  const enhanceHistory = useScannerStore((s) => s.enhanceHistory);
+  const steps = useScannerStore((s) => s.history.length);
 
   return (
     <div className="space-y-4">
@@ -17,12 +17,7 @@ export function EnhanceTool({ onScanStep, onStepBack, onOneClickFix }) {
       <Button className="w-full" onClick={onScanStep} disabled={isProcessing}>
         <Wand2 className="w-4 h-4 mr-2" /> Scan
       </Button>
-      <Button
-        variant="outline"
-        className="w-full"
-        onClick={onStepBack}
-        disabled={isProcessing || enhanceHistory.length === 0}
-      >
+      <Button variant="outline" className="w-full" onClick={onUndo} disabled={isProcessing || steps === 0}>
         <Undo2 className="w-4 h-4 mr-2" /> Step Back
       </Button>
       <div className="pt-2 space-y-2">
@@ -30,7 +25,7 @@ export function EnhanceTool({ onScanStep, onStepBack, onOneClickFix }) {
           <ScanLine className="w-4 h-4 mr-2" /> One-click fix
         </Button>
         <p className="text-xs text-muted-foreground">
-          Finds the page edges, straightens the page, removes shadows, and sharpens the text. Step Back undoes it.
+          Finds the page edges, straightens the page, removes shadows, and sharpens the text. Step Back undoes it, and any other edit (Ctrl+Z).
         </p>
       </div>
     </div>
