@@ -26,6 +26,11 @@ test("a known paper size gives the PDF page exactly that size, in either orienta
   assert.deepEqual(pdfPageSize(3300, 2550, "Letter"), { width: 792, height: 612 });
 });
 
+test("a page shaped exactly like a standard sheet gets that sheet's size", () => {
+  assert.deepEqual(pdfPageSize(1224, 1584), { width: 612, height: 792 }); // a Letter page rendered at 144 dpi
+  assert.deepEqual(pdfPageSize(3508, 2480), { width: 841.89, height: 595.28 });
+});
+
 test("a page of unknown size keeps its proportions at the length of an A4 sheet", () => {
   const size = pdfPageSize(4000, 2000);
   assert.ok(Math.abs(size.width - 841.89) < 1e-9 && Math.abs(size.height - 420.945) < 1e-9);

@@ -2,7 +2,13 @@
 import { FilePlus2, FolderOpen, Layers } from "lucide-react";
 import { openScannerPage } from "../commands/file-commands.js";
 import { useScannerStore } from "../../store/scanner-store";
+import { useObjectUrl } from "../../hooks/use-object-url";
 import { useRuntime } from "./editor-context.js";
+
+function PagePicture({ page }) {
+  const src = useObjectUrl(page.blob);
+  return src ? <img src={src} alt="" /> : null;
+}
 
 export function WelcomeScreen() {
   const rt = useRuntime();
@@ -30,7 +36,7 @@ export function WelcomeScreen() {
               {pages.map((page) => (
                 <li key={page.id}>
                   <button type="button" onClick={() => openScannerPage(rt, page)} title={`Open ${page.name}`}>
-                    <img src={page.src} alt="" />
+                    <PagePicture page={page} />
                     <span>{page.name}</span>
                   </button>
                 </li>

@@ -1,5 +1,5 @@
 // File menu: opening images, PDFs, and projects; saving; exporting.
-import { createCanvas } from "../engine/canvas.js";
+import { canvasToBlob, createCanvas, loadImageFromBlob } from "../engine/canvas.js";
 import { createLayer } from "../engine/layer.js";
 import { MAX_LAYERS } from "../engine/limits.js";
 import { downloadBlob } from "../engine/io/download.js";
@@ -9,7 +9,6 @@ import { baseName, fileKind } from "../engine/io/file-kind.js";
 import { decodeImageFile } from "../engine/io/image-file.js";
 import { projectFileName } from "../engine/io/project-format.js";
 import { readProject, writeProject } from "../engine/io/project-io.js";
-import { loadImage } from "../engine/canvas.js";
 import { flatten } from "../engine/flatten.js";
 import { useScannerStore } from "../../store/scanner-store";
 import { guardUnsaved, openCanvas, openDocument } from "./document-commands.js";
@@ -94,9 +93,9 @@ export function openScannerPage(rt, page) {
     rt,
     () =>
       rt.task("Opening page…", async () => {
-        const image = await loadImage(page.src);
-        const canvas = createCanvas(image.width, image.height);
-        canvas.getContext("2d").drawImage(image, 0, 0);
+        const image = await loadImageFromBlob(page.blob);
+        const canvas = createCanvas(page.width, page.height);
+        canvas.getContext("2d").drawImage(image, 0, 0, page.width, page.height);
         openCanvas(rt, canvas, baseName(page.name), { sourceId: page.id });
       }),
     "open another image",
@@ -137,18 +136,18 @@ export async function exportDocument(rt, { fileName, ...options }) {
 }
 
 // Places a flattened copy in the Simple scanner, replacing the page it came from.
-export function sendToScanner(rt) {
+export async function sendToScanner(rt) {
   if (!rt.session.hasDocument || !settle(rt)) return;
   const doc = rt.session.doc;
-  const src = flatten(doc).toDataURL("image/png");
+  const image = { blob: await canvasToBlob(flatten(doc)), width: doc.width, height: doc.height, paper: null };
   const scanner = useScannerStore.getState();
   const page = rt.session.sourceId && scanner.pages.find((p) => p.id === rt.session.sourceId);
   if (page) {
-    scanner.updatePage(page.id, { src, width: doc.width, height: doc.height });
+    scanner.commitImage(page.id, image);
     rt.toast(`Updated “${page.name}” in Simple.`);
   } else {
     const id = globalThis.crypto?.randomUUID?.() ?? String(Date.now());
-    scanner.addPage({ id, name: doc.name, src, originalSrc: src, width: doc.width, height: doc.height, originalWidth: doc.width, originalHeight: doc.height, createdAt: Date.now() });
+    scanner.addPage({ id, name: doc.name, createdAt: Date.now(), ...image, original: image });
     rt.session.sourceId = id;
     rt.toast(`Added “${doc.name}” to Simple as a new page.`);
   }
