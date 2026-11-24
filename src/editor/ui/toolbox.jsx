@@ -4,7 +4,7 @@ import { ColorSwatches } from "./color-swatches.jsx";
 import { useEditor, useRuntime } from "./editor-context.js";
 import { TOOL_CATALOG } from "./tool-catalog.js";
 
-const GROUP_BREAKS = new Set(["bycolor", "eraser", "ellipse"]);
+const GROUP_BREAKS = new Set(["bycolor", "bucket", "ellipse"]);
 
 export function Toolbox() {
   const rt = useRuntime();

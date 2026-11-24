@@ -1,3 +1,4 @@
+import { Segmented } from "../fields/segmented.jsx";
 import { SelectField } from "../fields/select-field.jsx";
 import { SliderField } from "../fields/slider-field.jsx";
 import { NumberField } from "../fields/number-field.jsx";
@@ -14,11 +15,20 @@ export function RectSelectOptions() {
   const edit = (key, value) => rt.tools.select.setRect(rt, { ...rect, [key]: value });
   return (
     <>
+      <Segmented
+        label="Shape"
+        value={o.kind}
+        onChange={(v) => set("kind", v)}
+        options={[
+          ["rect", "Rectangle"],
+          ["ellipse", "Ellipse"],
+        ]}
+      />
       <SelectionModeField value={o.mode} onChange={(v) => set("mode", v)} />
       <SliderField label="Feather" unit="px" min={0} max={100} value={o.feather} onChange={(v) => set("feather", v)} />
-      <SliderField label="Rounded corners" unit="px" min={0} max={500} value={o.radius} onChange={(v) => set("radius", v)} />
+      {o.kind === "rect" && <SliderField label="Rounded corners" unit="px" min={0} max={500} value={o.radius} onChange={(v) => set("radius", v)} />}
       <SelectField
-        label="Shape"
+        label="Size"
         value={o.style}
         onChange={(v) => set("style", v)}
         options={[

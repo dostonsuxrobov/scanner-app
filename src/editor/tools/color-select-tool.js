@@ -3,6 +3,7 @@
 // Tool Options re-applies the last click too.
 import { averageSample } from "../engine/color.js";
 import { colorDistances, distancesToMask } from "../engine/selection/color-match.js";
+import { connectedRegion } from "../engine/selection/connected-region.js";
 import { combineMasks, featherMask } from "../engine/selection/mask.js";
 import { createSelection } from "../engine/selection/selection.js";
 import { drawLabel } from "../overlay/label.js";
@@ -12,7 +13,7 @@ import { createSampleSource } from "./sample-source.js";
 
 export function createColorSelectTool() {
   const sampleSource = createSampleSource();
-  let last = null; // { distances, base, mode, revision }
+  let last = null; // { distances, base, mode, x, y, revision }
   let drag = null; // { startX, startThreshold, pointer }
   let frame = 0;
 
@@ -21,6 +22,8 @@ export function createColorSelectTool() {
     const o = rt.options("bycolor");
     const { width, height } = session.doc;
     let mask = distancesToMask(last.distances, o.threshold, o.antialias);
+    // Contiguous ("fuzzy select"): only the matching area that touches the click.
+    if (o.contiguous) mask = connectedRegion(mask, width, height, last.x, last.y);
     mask = featherMask(mask, width, height, o.feather);
     return createSelection(combineMasks(last.base?.mask, mask, last.mode), width, height);
   }
@@ -52,7 +55,7 @@ export function createColorSelectTool() {
       const mode = selectionMode(e, o.mode);
       const base = session.selection;
       const distances = colorDistances(source.data, sample, { criterion: o.criterion, transparent: o.transparent });
-      last = { distances, base, mode };
+      last = { distances, base, mode, x, y };
       session.setSelection(build(rt), "Select by color");
       last.revision = session.revision;
       drag = { startX: e.sx, startThreshold: o.threshold, pointer: e };

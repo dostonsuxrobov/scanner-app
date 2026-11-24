@@ -32,6 +32,17 @@ export function translateMask(mask, width, height, dx, dy) {
   return result;
 }
 
+// The part of a mask under a w × h window whose top-left corner is at (x, y),
+// e.g. the selection as a layer sees it. Outside the mask nothing is selected.
+export function maskWindow(mask, width, height, x, y, w, h) {
+  const out = new Uint8ClampedArray(w * h);
+  const left = Math.max(0, x), right = Math.min(width, x + w);
+  if (right <= left) return out;
+  for (let row = Math.max(0, y); row < Math.min(height, y + h); row++)
+    out.set(mask.subarray(row * width + left, row * width + right), (row - y) * w + left - x);
+  return out;
+}
+
 // Rasterizes a (optionally rounded) rectangle or an ellipse with antialiased edges.
 export function shapeMask(width, height, rect, { kind = "rect", radius = 0 } = {}) {
   const mask = new Uint8ClampedArray(width * height);

@@ -6,6 +6,15 @@ import { intersect, isEmptyRect } from "./rect.js";
 import { moveLayerTo } from "./layer.js";
 import { fitsLimits, limitsMessage } from "./limits.js";
 
+// The crop rect that gives the image a new size. `anchor` says which part
+// stays put: x and y are each 0 (left/top), 0.5 (centre) or 1 (right/bottom).
+export const canvasSizeRect = (doc, width, height, anchor) => ({
+  x: 0 - Math.round((width - doc.width) * anchor.x),
+  y: 0 - Math.round((height - doc.height) * anchor.y),
+  w: width,
+  h: height,
+});
+
 export function cropDocument(doc, rect, { deletePixels = true } = {}) {
   // Checked before anything changes: an oversized canvas cannot be displayed,
   // and its project file could not be opened again.

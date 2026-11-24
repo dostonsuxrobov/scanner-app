@@ -4,14 +4,16 @@ import * as file from "../commands/file-commands.js";
 import * as edit from "../commands/edit-commands.js";
 import * as select from "../commands/select-commands.js";
 import * as image from "../commands/image-commands.js";
+import * as size from "../commands/image-size-commands.js";
 import * as layer from "../commands/layer-commands.js";
 import * as view from "../commands/view-commands.js";
 import { guardUnsaved, closeDocument } from "../commands/document-commands.js";
 import { settle } from "../commands/settle.js";
 
-const dialog = (type) => (rt) => rt.store.getState().openDialog(type);
+const dialog = (type, props) => (rt) => rt.store.getState().openDialog(type, props);
 // Dialogs that preview on the active layer need pending tool work finished.
-const layerDialog = (type) => (rt) => settle(rt) && rt.store.getState().openDialog(type);
+const layerDialog = (type, props) => (rt) => settle(rt) && rt.store.getState().openDialog(type, props);
+const withSelection = (run) => (rt) => !!rt.session.selection && run(rt);
 const needsDoc = (run) => (rt) => rt.session.hasDocument && run(rt);
 
 export const COMMANDS = {
@@ -33,10 +35,22 @@ export const COMMANDS = {
   selectAll: { keys: ["Mod+A"], run: needsDoc(select.selectAll) },
   selectNone: { keys: ["Mod+D", "Mod+Shift+A"], run: needsDoc(select.selectNone) },
   invertSelection: { keys: ["Mod+Shift+I"], run: needsDoc(select.invertSelection) },
+  featherSelection: { keys: [], run: needsDoc(withSelection(dialog("selectionAmount", { action: "feather" }))) },
+  growSelection: { keys: [], run: needsDoc(withSelection(dialog("selectionAmount", { action: "grow" }))) },
+  shrinkSelection: { keys: [], run: needsDoc(withSelection(dialog("selectionAmount", { action: "shrink" }))) },
   cropToSelection: { keys: [], run: needsDoc(image.cropToSelection) },
+  rotateCw: { keys: [], run: needsDoc((rt) => size.turnImage(rt, "cw")) },
+  rotateCcw: { keys: [], run: needsDoc((rt) => size.turnImage(rt, "ccw")) },
+  rotateHalf: { keys: [], run: needsDoc((rt) => size.turnImage(rt, "half")) },
+  flipHorizontal: { keys: [], run: needsDoc((rt) => size.turnImage(rt, "flipH")) },
+  flipVertical: { keys: [], run: needsDoc((rt) => size.turnImage(rt, "flipV")) },
+  scaleImage: { keys: [], run: needsDoc(layerDialog("imageSize", { mode: "scale" })) },
+  canvasSize: { keys: [], run: needsDoc(layerDialog("imageSize", { mode: "canvas" })) },
   adjustColors: { keys: ["Mod+U"], run: needsDoc(layerDialog("adjust")) },
   desaturate: { keys: ["Mod+Shift+U"], run: needsDoc(image.desaturateLayer) },
   invertColors: { keys: ["Mod+I"], run: needsDoc(image.invertLayer) },
+  threshold: { keys: [], run: needsDoc(layerDialog("threshold")) },
+  autoContrast: { keys: [], run: needsDoc(image.autoContrastLayer) },
   blur: { keys: [], run: needsDoc(layerDialog("blur")) },
   newLayer: { keys: ["Mod+Alt+N"], run: needsDoc(layer.newLayer) },
   duplicateLayer: { keys: ["Mod+J"], run: needsDoc(layer.duplicateActiveLayer) },
@@ -64,6 +78,7 @@ export const TOOL_KEYS = [
   ["Shift+O", "bycolor"],
   ["B", "brush"],
   ["E", "eraser"],
+  ["Shift+B", "bucket"],
   ["T", "text"],
   ["U", "rectangle"],
   ["Shift+U", "ellipse"],
