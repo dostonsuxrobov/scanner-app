@@ -24,3 +24,11 @@ export const gridCorners = (points) => [
   gridPoint(points, GRID_ROWS - 1, GRID_COLS - 1),
   gridPoint(points, GRID_ROWS - 1, 0),
 ];
+
+// The grid's outer ring as four polylines running clockwise around the page:
+// top (left to right), right (downwards), bottom (right to left), left (upwards).
+export function gridOutline(points) {
+  const row = (r) => Array.from({ length: GRID_COLS }, (_, c) => gridPoint(points, r, c));
+  const col = (c) => Array.from({ length: GRID_ROWS }, (_, r) => gridPoint(points, r, c));
+  return [row(0), col(GRID_COLS - 1), row(GRID_ROWS - 1).reverse(), col(0).reverse()];
+}

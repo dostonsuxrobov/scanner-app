@@ -76,7 +76,7 @@ test("network input is a resized region as planar RGB in [0, 1]", () => {
 });
 
 test("curved pages are flattened through the network's grid", async () => {
-  const out = await oneClickFix(photo({ corners: page }), 800, 600, { predictGrid: async () => curledGrid(page, 30) });
+  const out = await oneClickFix(photo({ corners: page, bow: 30 }), 800, 600, { predictGrid: async () => curledGrid(page, 30) });
   assert.equal(out.method, "curved");
   assert.ok(out.height > out.width);
 });
@@ -87,11 +87,20 @@ test("flat pages use the exact perspective warp even with the network", async ()
   assert.equal(out.paper, "A4");
 });
 
-test("the network finds a page the classic detector cannot", async () => {
-  // A page as bright as its surroundings has no detectable outline.
+test("an outline with no visible edge behind it is not cropped to", async () => {
+  // A page as bright as its surroundings: the network still names an outline,
+  // but nothing in the photo confirms it.
   const data = photo({ corners: page, desk: 235, shadow: 0 });
   const out = await oneClickFix(data, 800, 600, { predictGrid: async () => planeGrid(page) });
+  assert.equal(out.method, "none");
+  assert.deepEqual([out.width, out.height], [800, 600]);
+});
+
+test("a flat page stays flat when the network's grid is off the page's edges", async () => {
+  // The network claims a curl the photo does not show.
+  const out = await oneClickFix(photo({ corners: page }), 800, 600, { predictGrid: async () => curledGrid(page, 30) });
   assert.equal(out.method, "perspective");
+  assert.equal(out.paper, "A4");
 });
 
 test("if the network fails, the classic fix is used and the reason kept", async () => {
@@ -122,13 +131,4 @@ test("a small page gets a second, closer look", async () => {
   const r = regions[1];
   assert.ok(r.x < 300 && r.y < 200 && r.x + r.w > 420 && r.y + r.h > 370, JSON.stringify(r));
   assert.ok(r.w * r.h < 800 * 600 * 0.2);
-});
-
-test("the network's page wins when the classic detector found something else", async () => {
-  // The classic detector sees the portrait page; the network says the page
-  // is a wide sheet around it, as when the detector locks onto a picture.
-  const wide = [{ x: 60, y: 40 }, { x: 740, y: 40 }, { x: 740, y: 560 }, { x: 60, y: 560 }];
-  const out = await oneClickFix(photo({ corners: page }), 800, 600, { predictGrid: async () => planeGrid(wide) });
-  assert.equal(out.method, "perspective");
-  assert.ok(out.width > out.height, `${out.width}×${out.height}`);
 });

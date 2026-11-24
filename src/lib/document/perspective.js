@@ -1,6 +1,6 @@
 // Perspective (homography) warp of a quadrilateral onto a rectangle, with
 // bilinear sampling. Shared by the manual perspective crop and One-click fix.
-function solveLinearSystem(A, b) {
+export function solveLinearSystem(A, b) {
   const n = b.length;
   const aug = A.map((row, i) => [...row, b[i]]);
   for (let col = 0; col < n; col++) {
