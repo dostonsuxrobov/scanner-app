@@ -87,10 +87,15 @@ export function createCropTool({ onCropped }) {
       if (rect.x === 0 && rect.y === 0 && rect.w === doc.width && rect.h === doc.height) return;
       const locked = doc.layers.find((l) => l.locked);
       if (locked) return rt.toast(`Unlock “${locked.name}” before cropping.`, true);
-      session.edit("Crop", (d) => {
-        cropDocument(d, rect, { deletePixels: rt.options("crop").deletePixels });
-        session.selection = null;
-      });
+      try {
+        session.edit("Crop", (d) => {
+          cropDocument(d, rect, { deletePixels: rt.options("crop").deletePixels });
+          session.selection = null;
+        });
+      } catch (error) {
+        // Enlarging past the size limit: nothing changed, keep the frame to adjust.
+        return rt.toast(error.message, true);
+      }
       onCropped(rt);
       tool.reset(rt);
     },

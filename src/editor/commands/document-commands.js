@@ -1,13 +1,14 @@
 // Replacing, closing, and guarding the open document.
 import { blankDocument, documentFromCanvas } from "../engine/document.js";
 import { fitsLimits, limitsMessage } from "../engine/limits.js";
+import { nonEmpty } from "../engine/selection/selection.js";
 import { resetToolState } from "./reset-tool-state.js";
 import { fitToScreen } from "./view-commands.js";
 
 export function openDocument(rt, doc, selection = null, { sourceId = null } = {}) {
   resetToolState(rt);
   rt.session.open(doc, { sourceId });
-  rt.session.selection = selection;
+  rt.session.selection = nonEmpty(selection);
   rt.tool?.activate?.(rt);
   fitToScreen(rt);
 }

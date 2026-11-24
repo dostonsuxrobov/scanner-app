@@ -49,15 +49,16 @@ function boxPass(src, dst, width, height, r, horizontal) {
   const length = horizontal ? width : height;
   const step = horizontal ? 1 : width;
   const scale = 1 / (r * 2 + 1);
+  const last = length - 1;
   for (let line = 0; line < lines; line++) {
     const start = horizontal ? line * width : line;
+    // Past the edges the nearest pixel repeats (GIMP's "clamp"), so an opaque
+    // layer stays opaque right up to its border instead of fading out.
     let sum = 0;
-    // Edges are treated as transparent, matching how layers fade at their bounds.
-    for (let i = 0; i <= r && i < length; i++) sum += src[start + i * step];
+    for (let i = -r; i <= r; i++) sum += src[start + Math.min(last, Math.max(0, i)) * step];
     for (let i = 0; i < length; i++) {
       dst[start + i * step] = sum * scale;
-      if (i + r + 1 < length) sum += src[start + (i + r + 1) * step];
-      if (i - r >= 0) sum -= src[start + (i - r) * step];
+      sum += src[start + Math.min(last, i + r + 1) * step] - src[start + Math.max(0, i - r) * step];
     }
   }
 }

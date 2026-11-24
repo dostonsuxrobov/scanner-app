@@ -78,6 +78,12 @@ export function createColorSelectTool() {
       drag = null;
     },
 
+    // The document is going away: free the per-pixel distances and samples.
+    reset() {
+      last = null;
+      sampleSource.clear();
+    },
+
     reapply,
 
     overlay(rt, ctx) {

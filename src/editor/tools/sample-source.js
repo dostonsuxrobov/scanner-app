@@ -4,7 +4,7 @@ import { flatten, layerInDocument } from "../engine/flatten.js";
 
 export function createSampleSource() {
   let cache = null;
-  return function sampleSource(rt, merged) {
+  function sampleSource(rt, merged) {
     const { session } = rt;
     const layer = session.activeLayer;
     const key = `${session.version}|${merged}|${layer?.id}`;
@@ -15,5 +15,10 @@ export function createSampleSource() {
       cache = { key, data, width: doc.width, height: doc.height };
     }
     return cache;
+  }
+  // The cache is a full copy of the image: drop it when the document goes away.
+  sampleSource.clear = () => {
+    cache = null;
   };
+  return sampleSource;
 }

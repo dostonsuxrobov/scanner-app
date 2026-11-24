@@ -39,6 +39,10 @@ export function createEyedropperTool() {
     cancel() {
       drag = null;
     },
+    // The document is going away: free the sampled copy of the image.
+    reset() {
+      sampleSource.clear();
+    },
     overlay(rt, ctx) {
       if (!drag?.pointer) return;
       const current = rt.store.getState().colors[drag.target];

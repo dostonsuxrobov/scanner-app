@@ -4,17 +4,18 @@
 // to move, drag outside to rotate (Shift snaps to 15°). Enter applies, Esc
 // cancels, and switching tools applies.
 import { layerBounds } from "../engine/layer.js";
+import { MAX_LAYERS } from "../engine/limits.js";
 import { contentBounds, cropCanvas } from "../engine/content-bounds.js";
 import { union } from "../engine/rect.js";
 import { rasterizeDraft } from "../engine/transform/rasterize-draft.js";
 import {
-  createDraft, draftBounds, draftCorners, draftMatrix, isIdentity, resizeDraft, rotateDraft,
+  createDraft, draftBounds, draftCorners, draftMatrix, isIdentity, resizeDraft, rotateDraft, snapDraft,
 } from "../engine/transform/transform-draft.js";
 import { docToScreen } from "../engine/view/viewport.js";
 import { drawHandles, handleCursor, handlePoints, hitHandle, pointInPolygon, strokeOutline } from "../overlay/handles.js";
 import { drawLabel } from "../overlay/label.js";
 import { ROTATE_CURSOR } from "../overlay/rotate-cursor.js";
-import { editableLayer } from "./helpers/editable-layer.js";
+import { editableLayer, textConverted } from "./helpers/editable-layer.js";
 import { liftRect, liftSelection } from "./helpers/lift-selection.js";
 
 export function createTransformTool() {
@@ -37,7 +38,9 @@ export function createTransformTool() {
     rt.redrawOverlay();
   }
 
-  function show(rt, draft, previous = null) {
+  function show(rt, next, previous = null) {
+    // Moves, flips, and quarter turns stay on whole pixels (no resampling).
+    const draft = snapDraft(next);
     setDraft(rt, draft);
     const smoothing = rt.options("scale").smoothing;
     const damage = previous ? union(draftBounds(previous), draftBounds(draft)) : null;
@@ -59,13 +62,20 @@ export function createTransformTool() {
     begin(rt) {
       const { session } = rt;
       if (!session.doc || draftOf(rt)) return;
-      let layer = editableLayer(rt);
+      // Text stays editable until the transform is applied; cancelling keeps it.
+      let layer = editableLayer(rt, { rasterize: false });
       if (!layer) return;
       const selection = session.selection;
       if (selection?.count) {
         if (layer.alphaLocked) return rt.toast(`Unlock transparency of “${layer.name}” to transform selected pixels.`, true);
+        if (session.doc.layers.length >= MAX_LAYERS) return rt.toast(`A document can have up to ${MAX_LAYERS} layers.`, true);
         float = session.begin("Transform selection");
         float.capture(layer, liftRect(layer, selection));
+        // Cutting pixels out of text makes it a pixel layer (undone by cancelling).
+        if (layer.text) {
+          float.converted = layer;
+          layer.text = null;
+        }
         layer = liftSelection(session.doc, layer, selection, { name: "Transformed pixels" });
         if (!layer) {
           rollBackFloat(rt);
@@ -107,12 +117,15 @@ export function createTransformTool() {
         // The float is normally still open; if something else closed it, the
         // transform gets its own undo step.
         const tx = float && !float.done ? float : session.begin("Transform");
+        const converted = tx.converted ?? (layer.text ? layer : null);
         float = null;
         layer.canvas = result.canvas;
         layer.x = result.x;
         layer.y = result.y;
+        layer.text = null; // the transformed pixels no longer match the text
         session.end(tx);
         rt.setLive(null, union(before, layerBounds(layer)));
+        if (converted) textConverted(rt, converted);
         return true;
       } catch (error) {
         rt.toast(error.message, true);
@@ -137,8 +150,10 @@ export function createTransformTool() {
     activate(rt) {
       tool.begin(rt);
     },
+    // Returns false when the transform cannot be applied, so the tool stays
+    // active with its draft instead of leaving it stranded.
     deactivate(rt) {
-      tool.apply(rt);
+      return tool.apply(rt);
     },
 
     cursor(rt, e) {

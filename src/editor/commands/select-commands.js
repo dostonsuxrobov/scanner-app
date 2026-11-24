@@ -18,6 +18,7 @@ export function invertSelection(rt) {
   const doc = rt.session.doc;
   if (!doc) return;
   const selection = rt.session.selection;
-  const mask = selection ? invertMask(selection.mask) : new Uint8ClampedArray(doc.width * doc.height);
-  rt.session.setSelection(createSelection(mask, doc.width, doc.height), "Invert selection");
+  // No selection means everything is editable; its inverse would select nothing.
+  if (!selection) return;
+  rt.session.setSelection(createSelection(invertMask(selection.mask), doc.width, doc.height), "Invert selection");
 }

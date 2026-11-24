@@ -2,7 +2,7 @@
 // transparency, and output scale.
 import { useState } from "react";
 import { exportDocument } from "../../commands/file-commands.js";
-import { EXPORT_FORMATS } from "../../engine/io/export-image.js";
+import { EXPORT_FORMATS } from "../../engine/io/export-formats.js";
 import { ColorField } from "../fields/color-field.jsx";
 import { NumberField } from "../fields/number-field.jsx";
 import { Segmented } from "../fields/segmented.jsx";

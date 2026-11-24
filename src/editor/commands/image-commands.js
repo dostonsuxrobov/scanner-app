@@ -61,5 +61,7 @@ export function cropToSelection(rt) {
     cropDocument(doc, selection.bounds, { deletePixels: true });
     session.selection = null;
   });
+  // The Crop tool's frame was drawn for the old size.
+  if (rt.store.getState().crop) rt.tools.crop.reset(rt);
   fitToScreen(rt);
 }

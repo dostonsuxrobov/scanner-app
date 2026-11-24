@@ -13,6 +13,7 @@ import { selectionCanvas } from "../engine/selection/selection.js";
 import { docToScreen } from "../engine/view/viewport.js";
 import { drawLabel } from "../overlay/label.js";
 import { editableLayer } from "./helpers/editable-layer.js";
+import { warnOutsideLayer } from "./helpers/outside-layer.js";
 
 export function createShapeTool(kind) {
   let drag = null; // { start, target: { layer, isNew }, merge, rect }
@@ -96,7 +97,10 @@ export function createShapeTool(kind) {
         tx.damage = isNew ? { ...bounds } : translate(bounds, layer.x, layer.y);
         rt.setLive(null, tx.damage);
         session.end(tx);
-      } else rt.setLive(null);
+      } else {
+        rt.setLive(null);
+        if (!isNew && drag.rect && isEmptyRect(bounds)) warnOutsideLayer(rt, layer);
+      }
       drag = null;
     },
 

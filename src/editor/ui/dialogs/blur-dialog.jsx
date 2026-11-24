@@ -29,7 +29,7 @@ export function BlurDialog({ onClose }) {
       }
     >
       <div className="ae-form">
-        <SliderField label="Radius" unit="px" min={0} max={100} step={0.5} value={radius} onChange={setRadius} />
+        <SliderField label="Radius" unit="px" min={0} max={100} value={radius} onChange={setRadius} />
         <CheckField label="Preview" checked={preview} onChange={setPreview} />
       </div>
     </Modal>

@@ -23,6 +23,9 @@ export function Viewport() {
 
   const onSize = useCallback(
     (width, height) => {
+      // Hidden (the user switched to Simple): keep the canvases and the view,
+      // so coming back shows the image at the same zoom and position.
+      if (!width || !height) return;
       const dpr = window.devicePixelRatio || 1;
       for (const canvas of [documentRef.current, overlayRef.current]) {
         canvas.width = Math.max(1, Math.round(width * dpr));

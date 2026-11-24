@@ -46,7 +46,8 @@ export const COMMANDS = {
   mergeDown: { keys: ["Mod+E"], run: needsDoc(layer.mergeDown) },
   flatten: { keys: [], run: needsDoc(layer.flattenImage) },
   rasterizeText: { keys: [], run: needsDoc(layer.rasterizeActiveText) },
-  transform: { keys: ["Mod+T"], run: needsDoc((rt) => rt.setTool("scale")) },
+  // Not Mod+T: browsers keep that for "new tab". Shift+T is GIMP's Unified Transform.
+  transform: { keys: ["Shift+T"], run: needsDoc((rt) => rt.setTool("scale")) },
   zoomIn: { keys: ["Mod+=", "Mod++", "="], run: needsDoc((rt) => view.zoomStep(rt, 1)) },
   zoomOut: { keys: ["Mod+-", "-"], run: needsDoc((rt) => view.zoomStep(rt, -1)) },
   fit: { keys: ["Mod+0", "Shift+1"], run: needsDoc(view.fitToScreen) },

@@ -32,6 +32,9 @@ export function createTextTool() {
     cursor: (rt, e) => (e && rt.session.doc && textLayerAt(rt.session.doc, e) ? "text" : "crosshair"),
 
     edit(rt, layer) {
+      // Switching here may have been refused, or have applied a transform that
+      // turned the layer into pixels.
+      if (rt.store.getState().tool !== "text" || !isTextLayer(rt.session.layer(layer.id))) return;
       const blocker = rt.session.editBlocker(layer);
       if (blocker) return rt.toast(blocker, true);
       rt.session.doc.activeId = layer.id;

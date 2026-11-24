@@ -2,13 +2,7 @@
 import { canvasToBlob, createCanvas } from "../canvas.js";
 import { flatten } from "../flatten.js";
 import { toPdfJpeg } from "../../../lib/pdf/pdf-page-image.js";
-
-export const EXPORT_FORMATS = {
-  png: { label: "PNG", ext: "png", mime: "image/png", lossy: false, alpha: true },
-  jpg: { label: "JPEG", ext: "jpg", mime: "image/jpeg", lossy: true, alpha: false },
-  webp: { label: "WebP", ext: "webp", mime: "image/webp", lossy: true, alpha: true },
-  pdf: { label: "PDF", ext: "pdf", mime: "application/pdf", lossy: true, alpha: false },
-};
+import { EXPORT_FORMATS } from "./export-formats.js";
 
 // options: { format, quality (0–1), background (for formats without alpha), scale }
 export async function exportImage(doc, { format = "png", quality = 0.92, background = "#ffffff", scale = 1 }) {

@@ -1,11 +1,12 @@
 // Move tool: drags the active layer, the selected pixels (lifted into their
 // own layer), or only the selection outline. Shift locks to one axis.
 import { layerBounds, moveLayerTo } from "../engine/layer.js";
+import { MAX_LAYERS } from "../engine/limits.js";
 import { union } from "../engine/rect.js";
-import { translateSelection } from "../engine/selection/selection.js";
-import { liftRect, liftSelection } from "./helpers/lift-selection.js";
+import { nonEmpty, translateSelection } from "../engine/selection/selection.js";
+import { coversLayer, liftRect, liftSelection } from "./helpers/lift-selection.js";
 import { pickLayer } from "./pick-layer.js";
-import { editableLayer } from "./helpers/editable-layer.js";
+import { editableLayer, textConverted } from "./helpers/editable-layer.js";
 
 function constrained(drag, e) {
   let dx = e.x - drag.start.x;
@@ -16,6 +17,7 @@ function constrained(drag, e) {
 
 export function createMoveTool() {
   let drag = null;
+  let floated = null; // id of the layer the last "Move pixels" drag lifted
 
   function beginLayerDrag(rt, e) {
     const { session } = rt;
@@ -31,27 +33,39 @@ export function createMoveTool() {
       }
     }
     let layer = session.activeLayer;
+    const selection = session.selection;
+    let tx, lifted = null, converted = null;
     if (target === "pixels") {
-      // Cutting pixels out of editable text converts it to a pixel layer first.
-      layer = editableLayer(rt, { alpha: true });
+      if (!selection?.count) return rt.toast("Select some pixels first, or set Move to “Layer”.", true);
+      layer = editableLayer(rt, { alpha: true, rasterize: false });
       if (!layer) return;
+      tx = session.begin("Move pixels");
+      // Pixels lifted by the previous drag just keep moving; lifting them
+      // again would leave an empty layer behind on every drag.
+      if (layer.id !== floated || !coversLayer(layer, selection)) {
+        if (doc.layers.length >= MAX_LAYERS) {
+          session.cancel(tx);
+          return rt.toast(`A document can have up to ${MAX_LAYERS} layers.`, true);
+        }
+        tx.capture(layer, liftRect(layer, selection));
+        // Cutting pixels out of editable text makes it a pixel layer.
+        if (layer.text) {
+          converted = layer;
+          layer.text = null;
+        }
+        layer = liftSelection(doc, layer, selection, { name: "Moved pixels" });
+        if (!layer) {
+          session.cancel(tx);
+          return rt.toast("The selection does not cover any pixels of this layer.", true);
+        }
+        lifted = layer.id;
+      }
     } else {
       const blocker = session.editBlocker(layer);
       if (blocker) return rt.toast(blocker, true);
+      tx = session.begin("Move layer");
     }
-    let tx;
-    const selection = session.selection;
-    if (target === "pixels") {
-      if (!selection?.count) return rt.toast("Select some pixels first, or set Move to “Layer”.", true);
-      tx = session.begin("Move pixels");
-      tx.capture(layer, liftRect(layer, selection));
-      layer = liftSelection(doc, layer, selection, { name: "Moved pixels" });
-      if (!layer) {
-        session.cancel(tx);
-        return rt.toast("The selection does not cover any pixels of this layer.", true);
-      }
-    } else tx = session.begin("Move layer");
-    drag = { kind: "layer", tx, layerId: layer.id, start: e, origin: { x: layer.x, y: layer.y }, selection, withSelection: target === "pixels", offset: { dx: 0, dy: 0 } };
+    drag = { kind: "layer", tx, layerId: layer.id, start: e, origin: { x: layer.x, y: layer.y }, selection, withSelection: target === "pixels", offset: { dx: 0, dy: 0 }, lifted, converted };
     rt.invalidate(null);
   }
 
@@ -87,16 +101,24 @@ export function createMoveTool() {
       const { tx, offset, selection } = drag;
       const moved = offset.dx || offset.dy;
       if ((drag.kind === "outline" || drag.withSelection) && selection && moved)
-        rt.session.selection = translateSelection(selection, offset.dx, offset.dy);
+        rt.session.selection = nonEmpty(translateSelection(selection, offset.dx, offset.dy));
       // A click without movement changes nothing (and lifts nothing).
-      if (moved) rt.session.end(tx);
-      else rt.session.cancel(tx);
+      if (moved) {
+        rt.session.end(tx);
+        if (drag.lifted) floated = drag.lifted;
+        if (drag.converted) textConverted(rt, drag.converted);
+      } else rt.session.cancel(tx);
       drag = null;
     },
 
     cancel(rt) {
       if (drag) rt.session.cancel(drag.tx);
       drag = null;
+    },
+
+    // The document is being replaced; its lifted layer is gone.
+    reset() {
+      floated = null;
     },
 
     // While dragging, the outline follows by offset; the mask moves on release.

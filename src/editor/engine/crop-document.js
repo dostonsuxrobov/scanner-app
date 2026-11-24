@@ -4,8 +4,12 @@
 import { createCanvas } from "./canvas.js";
 import { intersect, isEmptyRect } from "./rect.js";
 import { moveLayerTo } from "./layer.js";
+import { fitsLimits, limitsMessage } from "./limits.js";
 
 export function cropDocument(doc, rect, { deletePixels = true } = {}) {
+  // Checked before anything changes: an oversized canvas cannot be displayed,
+  // and its project file could not be opened again.
+  if (!fitsLimits(rect.w, rect.h)) throw new Error(`The image would be too large. ${limitsMessage()}`);
   for (const layer of doc.layers) {
     if (deletePixels && !layer.text) {
       const keep = intersect(rect, { x: layer.x, y: layer.y, w: layer.canvas.width, h: layer.canvas.height });

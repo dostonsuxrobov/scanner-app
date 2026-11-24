@@ -28,10 +28,16 @@ export function createDraft(layerId, source, x, y) {
 
 const rad = (deg) => (deg * Math.PI) / 180;
 
+// cos/sin that are exactly 0 and ±1 at quarter turns (Math.cos(90°) is 6e-17),
+// so a quarter turn maps pixels exactly onto pixels.
+function trig(angle) {
+  const exact = (v) => (Math.abs(v) < 1e-12 ? 0 : Math.abs(v) > 1 - 1e-12 ? Math.sign(v) : v);
+  return { cos: exact(Math.cos(rad(angle))), sin: exact(Math.sin(rad(angle))) };
+}
+
 // Source pixel → document coordinates, as a canvas transform [a, b, c, d, e, f].
 export function draftMatrix(d) {
-  const cos = Math.cos(rad(d.angle));
-  const sin = Math.sin(rad(d.angle));
+  const { cos, sin } = trig(d.angle);
   const sx = (d.w / d.sourceW) * (d.flipX ? -1 : 1);
   const sy = (d.h / d.sourceH) * (d.flipY ? -1 : 1);
   const a = cos * sx, b = sin * sx, c = -sin * sy, dd = cos * sy;
@@ -41,16 +47,26 @@ export function draftMatrix(d) {
 }
 
 export function toLocal(d, p) {
-  const cos = Math.cos(rad(-d.angle));
-  const sin = Math.sin(rad(-d.angle));
+  const { cos, sin } = trig(-d.angle);
   const x = p.x - d.cx, y = p.y - d.cy;
   return { x: x * cos - y * sin, y: x * sin + y * cos };
 }
 
 export function toDocument(d, p) {
-  const cos = Math.cos(rad(d.angle));
-  const sin = Math.sin(rad(d.angle));
+  const { cos, sin } = trig(d.angle);
   return { x: d.cx + p.x * cos - p.y * sin, y: d.cy + p.x * sin + p.y * cos };
+}
+
+// Places a draft that needs no resampling (a move, flip, or quarter turn at a
+// whole-pixel size) on whole pixels. Left between pixels, every pixel of the
+// layer would be blended with its neighbour and the result blurred for nothing.
+export function snapDraft(d) {
+  if (d.angle % 90 !== 0 || !Number.isInteger(d.w) || !Number.isInteger(d.h)) return d;
+  const turned = d.angle % 180 !== 0;
+  const w = turned ? d.h : d.w, h = turned ? d.w : d.h;
+  const cx = Math.round(d.cx - w / 2) + w / 2;
+  const cy = Math.round(d.cy - h / 2) + h / 2;
+  return cx === d.cx && cy === d.cy ? d : { ...d, cx, cy };
 }
 
 export function draftCorners(d) {
