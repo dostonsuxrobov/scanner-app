@@ -2,7 +2,8 @@
 // Adjustments respect the selection, including soft (feathered) edges.
 import { cropDocument } from "../engine/crop-document.js";
 import { filteredLayer } from "../engine/adjust/filtered-layer.js";
-import { adjustColors, desaturate, invertColors } from "../engine/adjust/color-adjust.js";
+import { adjustColors, desaturate, invertColors, threshold } from "../engine/adjust/color-adjust.js";
+import { stretchContrast } from "../engine/adjust/stretch-contrast.js";
 import { gaussianBlur } from "../engine/adjust/gaussian-blur.js";
 import { layerBounds } from "../engine/layer.js";
 import { editableLayer } from "../tools/helpers/editable-layer.js";
@@ -10,6 +11,7 @@ import { fitToScreen } from "./view-commands.js";
 import { settle } from "./settle.js";
 
 export const adjustmentOperation = (values) => (data) => adjustColors(data, values);
+export const thresholdOperation = (level) => (data) => threshold(data, level);
 export const blurOperation = (radius) => (data, width, height) => gaussianBlur(data, width, height, radius);
 
 export function applyLayerOperation(rt, label, operation) {
@@ -49,6 +51,8 @@ export function endPreview(rt) {
 
 export const desaturateLayer = (rt) => applyLayerOperation(rt, "Desaturate", desaturate);
 export const invertLayer = (rt) => applyLayerOperation(rt, "Invert colors", invertColors);
+// Measured on the selected part of the layer when there is a selection.
+export const autoContrastLayer = (rt) => applyLayerOperation(rt, "Auto contrast", (data, width, height, coverage) => stretchContrast(data, coverage()));
 
 export function cropToSelection(rt) {
   const { session } = rt;
@@ -61,5 +65,7 @@ export function cropToSelection(rt) {
     cropDocument(doc, selection.bounds, { deletePixels: true });
     session.selection = null;
   });
+  // The Crop tool's frame was drawn for the old size.
+  if (rt.store.getState().crop) rt.tools.crop.reset(rt);
   fitToScreen(rt);
 }

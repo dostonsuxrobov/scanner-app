@@ -16,7 +16,7 @@ export function CropTool({ onExecuteCrop }) {
         <p className="text-xs text-muted-foreground">Drag the 4 corners to select your document. Corrects perspective automatically.</p>
       </div>
       {!cropMode ? (
-        <Button className="w-full" onClick={() => setCropMode(true)}>
+        <Button className="w-full" onClick={() => setCropMode(true)} disabled={isProcessing}>
           <Crop className="w-4 h-4 mr-2" /> Start Crop
         </Button>
       ) : (

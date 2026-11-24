@@ -11,6 +11,7 @@ import { averageSample, rgbToHex } from "../engine/color.js";
 import { selectionCanvas } from "../engine/selection/selection.js";
 import { drawBrushCursor } from "../overlay/brush-cursor.js";
 import { editableLayer } from "./helpers/editable-layer.js";
+import { warnOutsideLayer } from "./helpers/outside-layer.js";
 import { createSampleSource } from "./sample-source.js";
 
 export function createPaintTool(id) {
@@ -115,7 +116,10 @@ export function createPaintTool(id) {
         tx.damage = translate(bounds, layer.x, layer.y);
         rt.setLive(null, tx.damage);
         session.end(tx);
-      } else rt.setLive(null);
+      } else {
+        rt.setLive(null);
+        warnOutsideLayer(rt, layer);
+      }
       lastPoint = { layerId: layer.id, ...(stroke.sampler.target ?? {}) };
       stroke = null;
     },
@@ -123,6 +127,14 @@ export function createPaintTool(id) {
     cancel(rt) {
       if (stroke) rt.setLive(null);
       stroke = null;
+    },
+
+    // The document is going away: free the layer-sized stroke buffer and the
+    // sampled copy of the image.
+    reset() {
+      buffer = null;
+      lastPoint = null;
+      sampleSource.clear();
     },
 
     overlay(rt, ctx, view) {

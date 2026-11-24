@@ -1,8 +1,9 @@
 // Layer menu and Layers panel actions.
 import { createCanvas } from "../engine/canvas.js";
 import { createLayer, duplicateLayer, isTextLayer, moveLayerTo } from "../engine/layer.js";
-import { MAX_LAYERS } from "../engine/limits.js";
+import { MAX_LAYERS, fitsLimits, limitsMessage } from "../engine/limits.js";
 import { flatten } from "../engine/flatten.js";
+import { mergeLayers, mergedBounds } from "../engine/merge-layers.js";
 import { rasterizeText } from "../tools/helpers/editable-layer.js";
 import { settle } from "./settle.js";
 
@@ -87,12 +88,14 @@ export function mergeDown(rt) {
   if (!top || i < 1 || !settle(rt)) return;
   const bottom = doc.layers[i - 1];
   if (top.locked || bottom.locked) return rt.toast("Unlock both layers before merging.", true);
+  // A hidden top layer would vanish in the merge; a hidden bottom one would hide the result.
+  if (!top.visible || !bottom.visible) return rt.toast("Show both layers before merging.", true);
+  const area = mergedBounds(bottom, top);
+  if (!fitsLimits(area.w, area.h)) return rt.toast(`The merged layer would be too large. ${limitsMessage()}`, true);
   // The top layer is baked onto the bottom one, which keeps its own opacity
   // and blend mode, so the image looks the same after merging.
-  const base = { ...bottom, visible: true, opacity: 100, blend: "source-over" };
-  const canvas = flatten({ ...doc, layers: [base, top] });
+  const merged = { ...bottom, ...mergeLayers(bottom, top), text: null };
   session.edit("Merge down", (d) => {
-    const merged = { ...bottom, canvas, x: 0, y: 0, text: null };
     d.layers.splice(i - 1, 2, merged);
     d.activeId = merged.id;
   });

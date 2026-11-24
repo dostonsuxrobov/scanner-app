@@ -1,25 +1,35 @@
-import { jsPDF } from 'jspdf';
+// Saves pages to the device as an image or a PDF.
 import { showToast } from './utils';
 import { toPdfJpeg } from './pdf/pdf-page-image';
+import { pdfPageSize } from './pdf/pdf-page-size';
+import { decodeImage } from './page-image';
 
-export function exportSinglePage(canvas, name, type) {
+// jsPDF is large and only needed once something is exported as PDF.
+const loadJsPdf = async () => (await import('jspdf')).jsPDF;
+
+// Adds `source` (a canvas or image) as a full page; returns the document.
+function addPdfPage(JsPdf, doc, source, width, height, paper) {
+  const size = pdfPageSize(width, height, paper);
+  const format = [size.width, size.height];
+  const orientation = size.width > size.height ? 'l' : 'p';
+  if (doc) doc.addPage(format, orientation);
+  else doc = new JsPdf({ orientation, unit: 'pt', format });
+  doc.addImage(toPdfJpeg(source), 'JPEG', 0, 0, size.width, size.height);
+  return doc;
+}
+
+export async function exportSinglePage(canvas, name, type, paper = null) {
   try {
     if (type === 'jpg' || type === 'png') {
-      const mime = type === 'jpg' ? 'image/jpeg' : 'image/png';
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, type === 'jpg' ? 'image/jpeg' : 'image/png', 0.92));
       const link = document.createElement('a');
       link.download = `doc-${name}.${type}`;
-      link.href = canvas.toDataURL(mime, 1.0);
+      link.href = URL.createObjectURL(blob);
       link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
       showToast(`Exported as ${type.toUpperCase()}`);
     } else {
-      const orient = canvas.width > canvas.height ? 'l' : 'p';
-      const doc = new jsPDF({
-        orientation: orient,
-        unit: 'px',
-        format: [canvas.width, canvas.height],
-      });
-      doc.addImage(toPdfJpeg(canvas), 'JPEG', 0, 0, canvas.width, canvas.height);
-      doc.save(`doc-${name}.pdf`);
+      addPdfPage(await loadJsPdf(), null, canvas, canvas.width, canvas.height, paper).save(`doc-${name}.pdf`);
       showToast('Exported as PDF');
     }
   } catch (err) {
@@ -28,28 +38,13 @@ export function exportSinglePage(canvas, name, type) {
 }
 
 export async function exportAllAsPdf(pages, onProgress) {
+  const JsPdf = await loadJsPdf();
   let doc = null;
-
   for (let i = 0; i < pages.length; i++) {
     onProgress?.(`Adding page ${i + 1}/${pages.length}...`);
     const page = pages[i];
-
-    const img = await new Promise((resolve, reject) => {
-      const image = new Image();
-      image.onload = () => resolve(image);
-      image.onerror = reject;
-      image.src = page.src;
-    });
-
-    const orient = page.width > page.height ? 'l' : 'p';
-    if (i === 0) {
-      doc = new jsPDF({ orientation: orient, unit: 'px', format: [page.width, page.height] });
-    } else {
-      doc.addPage([page.width, page.height], orient);
-    }
-    doc.addImage(toPdfJpeg(img), 'JPEG', 0, 0, page.width, page.height);
+    doc = addPdfPage(JsPdf, doc, await decodeImage(page.blob), page.width, page.height, page.paper);
   }
-
   doc.save('document-all-pages.pdf');
   showToast(`Exported ${pages.length} page(s) as PDF`);
 }

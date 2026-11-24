@@ -50,7 +50,9 @@ export function createEditorRuntime() {
     setTool(id) {
       const current = store.getState().tool;
       if (current === id || !runtime.tools[id]) return;
-      if (session.hasDocument) runtime.tools[current]?.deactivate?.(runtime);
+      // A tool may refuse to be left (a transform too large to apply). Staying
+      // on it keeps its pending work visible and fixable.
+      if (session.hasDocument && runtime.tools[current]?.deactivate?.(runtime) === false) return;
       store.getState().setTool(id);
       if (session.hasDocument) runtime.tools[id].activate?.(runtime);
       scheduler.request("overlay");

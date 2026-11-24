@@ -15,16 +15,21 @@ export function projectPage({ page = [210, 297], tilt = 0.5, turn = 0.25, roll =
   });
 }
 
-export function photo({ width = 800, height = 600, corners, desk = 70, paper = 235, shadow = 0.55, seed = 3 }) {
+// `bow` (px) curls the page like an open book: each row sags towards its ends.
+export function photo({ width = 800, height = 600, corners, desk = 70, paper = 235, shadow = 0.55, seed = 3, bow = 0 }) {
   let s = seed;
   const noise = () => ((s = (s * 1103515245 + 12345) % 2147483648) / 2147483648 - 0.5) * 10;
   const H = computePerspectiveTransform(corners, [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }]);
   const data = new Uint8ClampedArray(width * height * 4);
   for (let y = 0; y < height; y++)
     for (let x = 0; x < width; x++) {
-      const d = H[6] * x + H[7] * y + 1;
-      const u = (H[0] * x + H[1] * y + H[2]) / d;
-      const v = (H[3] * x + H[4] * y + H[5]) / d;
+      // The page point (u, v) appears `bow·sin(πu)` px above its flat position.
+      let u = 0, v = 0;
+      for (let pass = 0, fy = y; pass < (bow ? 4 : 1); pass++, fy = y + bow * Math.sin(Math.PI * Math.min(1, Math.max(0, u)))) {
+        const d = H[6] * x + H[7] * fy + 1;
+        u = (H[0] * x + H[1] * fy + H[2]) / d;
+        v = (H[3] * x + H[4] * fy + H[5]) / d;
+      }
       let value = desk + noise();
       if (u >= 0 && u <= 1 && v >= 0 && v <= 1) {
         // Light falls off towards the right: a soft shadow across the page.

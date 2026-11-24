@@ -2,6 +2,7 @@
 import { createCanvas } from "../engine/canvas.js";
 import { createLayer, layerBounds } from "../engine/layer.js";
 import { MAX_LAYERS } from "../engine/limits.js";
+import { fillLayer } from "../engine/paint/fill-layer.js";
 import { intersect, isEmptyRect } from "../engine/rect.js";
 import { selectionCanvas } from "../engine/selection/selection.js";
 import { decodeImageFile } from "../engine/io/image-file.js";
@@ -9,15 +10,24 @@ import { editableLayer } from "../tools/helpers/editable-layer.js";
 import { addLayerFromCanvas } from "./file-commands.js";
 import { settle } from "./settle.js";
 
+// Undo and redo can change the image size (a crop); the Crop tool's frame
+// was drawn for the old size, so it starts over.
+function stepHistory(rt, step) {
+  const size = () => `${rt.session.doc.width}x${rt.session.doc.height}`;
+  const before = size();
+  step();
+  if (rt.store.getState().crop && size() !== before) rt.tools.crop.reset(rt);
+}
+
 export function undo(rt) {
   if (rt.store.getState().textEdit) return rt.tools.text.discard(rt);
   if (rt.tools.scale.interceptUndo(rt)) return;
-  rt.session.undo();
+  stepHistory(rt, () => rt.session.undo());
 }
 
 export function redo(rt) {
   if (!settle(rt)) return;
-  rt.session.redo();
+  stepHistory(rt, () => rt.session.redo());
 }
 
 // Region of the layer (layer coordinates) affected by the selection, or all of it.
@@ -127,22 +137,7 @@ export function fill(rt, which = "fg") {
   const rect = affectedRect(layer, selection);
   rt.session.edit(
     which === "fg" ? "Fill with foreground" : "Fill with background",
-    () => {
-      const { width, height } = layer.canvas;
-      const paint = createCanvas(width, height);
-      const pctx = paint.getContext("2d");
-      pctx.fillStyle = color;
-      pctx.fillRect(0, 0, width, height);
-      if (selection) {
-        pctx.globalCompositeOperation = "destination-in";
-        pctx.drawImage(selectionCanvas(selection), -layer.x, -layer.y);
-      }
-      const ctx = layer.canvas.getContext("2d");
-      ctx.save();
-      ctx.globalCompositeOperation = layer.alphaLocked ? "source-atop" : "source-over";
-      ctx.drawImage(paint, 0, 0);
-      ctx.restore();
-    },
+    () => fillLayer(layer, color, selection),
     [[layer, rect]],
   );
 }

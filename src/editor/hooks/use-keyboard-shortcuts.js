@@ -3,10 +3,8 @@
 import { useEffect } from "react";
 import { COMMANDS, TOOL_KEYS } from "../keymap/keymap.js";
 import { matchesCombo } from "../keymap/combo.js";
+import { controlKeepsKey } from "../keymap/typing-target.js";
 import { selectNone } from "../commands/select-commands.js";
-
-const typingInto = (target) =>
-  /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable;
 
 function adjustBrush(rt, event) {
   const tool = rt.store.getState().tool;
@@ -32,7 +30,7 @@ export function useKeyboardShortcuts(rt, active) {
     };
 
     function onKeyDown(event) {
-      if (rt.store.getState().dialog || typingInto(event.target)) return;
+      if (rt.store.getState().dialog || controlKeepsKey(event.target, event)) return;
       if (rt.gestureActive) {
         if (!event.repeat && event.key !== "Shift" && event.key !== "Alt") event.preventDefault();
         return;

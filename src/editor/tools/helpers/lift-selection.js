@@ -11,6 +11,13 @@ export function liftRect(layer, selection) {
   return { x: b.x - layer.x, y: b.y - layer.y, w: b.w, h: b.h };
 }
 
+// True when lifting would take the layer's whole rectangle, as for pixels a
+// previous lift already put on their own layer.
+export function coversLayer(layer, selection) {
+  const b = intersect(selection.bounds, layerBounds(layer));
+  return b.w === layer.canvas.width && b.h === layer.canvas.height;
+}
+
 export function liftSelection(doc, layer, selection, { cut = true, name } = {}) {
   const b = intersect(selection.bounds, layerBounds(layer));
   if (isEmptyRect(b)) return null;

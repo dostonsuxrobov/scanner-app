@@ -9,6 +9,10 @@ export function createSelection(mask, width, height, shape = null) {
   return { mask, width, height, bounds, count: bounds.count, shape, cache: {} };
 }
 
+// A selection that covers nothing means "no selection": kept, it would have no
+// outline yet still clip every stroke, fill, and delete to nothing.
+export const nonEmpty = (selection) => (selection?.count ? selection : null);
+
 export const selectionBytes = (selection) => (selection ? selection.mask.length * 5 : 0);
 
 // Alpha canvas of the mask, used to clip pixel operations on the GPU.

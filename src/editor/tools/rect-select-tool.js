@@ -14,12 +14,20 @@ import { selectionCursor } from "../overlay/selection-cursor.js";
 
 export function buildRectSelection(doc, rect, options, mode, base) {
   const r = roundRect(rect);
-  let mask = shapeMask(doc.width, doc.height, r, { radius: options.radius });
+  const kind = options.kind ?? "rect"; // "rect" | "ellipse", inscribed in the box
+  let mask = shapeMask(doc.width, doc.height, r, { kind, radius: options.radius });
   mask = featherMask(mask, doc.width, doc.height, options.feather);
   const combined = combineMasks(base?.mask, mask, mode);
-  const shape = mode === "replace" ? { type: "rect", rect: r, radius: options.radius, feather: options.feather } : null;
+  const shape = mode === "replace" ? { type: "rect", kind, rect: r, radius: options.radius, feather: options.feather } : null;
   return createSelection(combined, doc.width, doc.height, shape);
 }
+
+// Screen outline of the ellipse inscribed in a box, for the drag preview.
+const ellipseOutline = ([nw, , se], points = 72) =>
+  Array.from({ length: points }, (_, i) => {
+    const a = (i * 2 * Math.PI) / points;
+    return { x: (nw.x + se.x) / 2 + ((se.x - nw.x) / 2) * Math.cos(a), y: (nw.y + se.y) / 2 + ((se.y - nw.y) / 2) * Math.sin(a) };
+  });
 
 const styleRatio = (o) => (o.style === "ratio" && o.ratioW > 0 && o.ratioH > 0 ? o.ratioW / o.ratioH : null);
 
@@ -128,7 +136,8 @@ export function createRectSelectTool() {
     overlay(rt, ctx, view, phase) {
       if (drag?.rect) {
         const corners = rectCorners(roundRect(drag.rect), view);
-        drawDashedPolygon(ctx, corners, phase);
+        const kind = drag.kind === "edit" ? editableShape(rt)?.kind : rt.options("select").kind;
+        drawDashedPolygon(ctx, kind === "ellipse" ? ellipseOutline(corners) : corners, phase);
         const r = roundRect(drag.rect);
         drawLabel(ctx, `${r.w} × ${r.h}`, corners[2].x, corners[2].y);
         return;

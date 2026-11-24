@@ -4,6 +4,7 @@ import { createRectSelectTool } from "./rect-select-tool.js";
 import { createTransformTool } from "./transform-tool.js";
 import { createColorSelectTool } from "./color-select-tool.js";
 import { createPaintTool } from "./paint-tool.js";
+import { createBucketTool } from "./bucket-tool.js";
 import { createTextTool } from "./text-tool.js";
 import { createShapeTool } from "./shape-tool.js";
 import { createEyedropperTool } from "./eyedropper-tool.js";
@@ -18,6 +19,7 @@ export function createTools() {
     createColorSelectTool(),
     createPaintTool("brush"),
     createPaintTool("eraser"),
+    createBucketTool(),
     createTextTool(),
     createShapeTool("rectangle"),
     createShapeTool("ellipse"),

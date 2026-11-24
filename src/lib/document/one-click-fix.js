@@ -2,18 +2,19 @@
 //
 // `predictGrid(region)` (optional, async) runs a page-unwarping network
 // (UVDoc) on a region of the photo and returns its page grid in photo pixels,
-// or null. A flat page is straightened with an exact perspective warp from
-// its corners; a curved, folded, or crumpled page is resampled through the
-// network's grid. Without the network, flat-page straightening is used.
+// or null. How the page is straightened (exact perspective warp, the
+// network's grid, or not at all) is decided in page-geometry.js.
 import { detectDocument } from "./detect-document.js";
 import { pageSize, sizeFromAspect } from "./output-size.js";
 import { applyPerspectiveTransform } from "./perspective.js";
 import { cleanDocument } from "./clean-document.js";
 import { clearBorder } from "./clear-border.js";
-import { curvature, surfaceLengths } from "./grid-analysis.js";
+import { surfaceLengths } from "./grid-analysis.js";
 import { unwarpWithGrid } from "./grid-unwarp.js";
 import { gridCorners } from "./uvdoc-grid.js";
 import { boundsShare, inset, regionAround, sameQuad } from "./page-quad.js";
+import { edgeMap } from "./outline-support.js";
+import { choosePageGeometry } from "./page-geometry.js";
 
 // Corners are pulled in slightly so no sliver of the background survives.
 const INSET = 0.006;
@@ -24,12 +25,6 @@ const REGION_MARGIN = 0.08;
 // The closer look must find the same page (corner distance, share of the
 // page's diagonal).
 const SAME_PAGE = 0.1;
-// Classic edge-based corners are sharper than the network's; they are used
-// when both agree this closely.
-const CORNERS_AGREE = 0.04;
-// Grid deviation from a flat plane (share of the page's size) above which
-// the page counts as curved.
-const CURVED = 0.006;
 
 function straighten(data, width, height, corners) {
   const size = pageSize(corners, width, height);
@@ -55,7 +50,6 @@ async function locatePage(predictGrid, width, height) {
 
 export async function oneClickFix(data, width, height, { predictGrid = null } = {}) {
   const detected = detectDocument(data, width, height);
-  const corners = detected.found ? inset(detected.corners, INSET) : null;
   let points = null;
   let aiError = null;
   if (predictGrid) {
@@ -65,14 +59,10 @@ export async function oneClickFix(data, width, height, { predictGrid = null } = 
       aiError = error.message || String(error);
     }
   }
+  const geometry = choosePageGeometry(edgeMap(data, width, height), detected.corners, points);
   let result = null;
-  if (points) {
-    const { width: w, height: h } = surfaceLengths(points);
-    const bent = curvature(points) / Math.max(w, h) > CURVED;
-    const networkCorners = gridCorners(points);
-    const flatCorners = corners && sameQuad(corners, networkCorners, CORNERS_AGREE) ? corners : inset(networkCorners, INSET);
-    result = bent ? flatten(data, width, height, points) : straighten(data, width, height, flatCorners);
-  } else if (corners) result = straighten(data, width, height, corners);
+  if (geometry?.kind === "curved") result = flatten(data, width, height, geometry.points);
+  else if (geometry) result = straighten(data, width, height, inset(geometry.corners, INSET));
   const out = result ?? { data: new Uint8ClampedArray(data), width, height, paper: null, method: "none" };
   cleanDocument(out.data, out.width, out.height);
   if (result) clearBorder(out.data, out.width, out.height);

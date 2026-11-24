@@ -56,6 +56,16 @@ export function desaturate(data) {
   return data;
 }
 
+// Black and white only: pixels at least as bright as `level` (0–255) turn
+// white, darker ones black. Transparency is kept.
+export function threshold(data, level) {
+  for (let p = 0; p < data.length; p += 4) {
+    const y = 0.2126 * data[p] + 0.7152 * data[p + 1] + 0.0722 * data[p + 2];
+    data[p] = data[p + 1] = data[p + 2] = y >= level ? 255 : 0;
+  }
+  return data;
+}
+
 export function invertColors(data) {
   for (let p = 0; p < data.length; p += 4) {
     data[p] = 255 - data[p];

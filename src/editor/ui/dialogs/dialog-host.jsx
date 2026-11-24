@@ -3,9 +3,12 @@ import { useEditor } from "../editor-context.js";
 import { AdjustColorsDialog } from "./adjust-colors-dialog.jsx";
 import { BlurDialog } from "./blur-dialog.jsx";
 import { ExportDialog } from "./export-dialog.jsx";
+import { ImageSizeDialog } from "./image-size-dialog.jsx";
 import { NewImageDialog } from "./new-image-dialog.jsx";
 import { PdfImportDialog } from "./pdf-import-dialog.jsx";
+import { SelectionAmountDialog } from "./selection-amount-dialog.jsx";
 import { ShortcutsDialog } from "./shortcuts-dialog.jsx";
+import { ThresholdDialog } from "./threshold-dialog.jsx";
 import { UnsavedDialog } from "./unsaved-dialog.jsx";
 
 const DIALOGS = {
@@ -15,6 +18,9 @@ const DIALOGS = {
   pdf: PdfImportDialog,
   adjust: AdjustColorsDialog,
   blur: BlurDialog,
+  threshold: ThresholdDialog,
+  selectionAmount: SelectionAmountDialog,
+  imageSize: ImageSizeDialog,
   shortcuts: ShortcutsDialog,
 };
 

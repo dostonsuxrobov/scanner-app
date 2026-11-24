@@ -5,7 +5,7 @@ import { createHistory } from "./history.js";
 import { capturePatch, swapPatch, patchBytes } from "./pixel-patch.js";
 import { copyLayerRecord } from "./layer.js";
 import { activeLayer, findLayer } from "./document.js";
-import { selectionBytes } from "./selection/selection.js";
+import { nonEmpty, selectionBytes } from "./selection/selection.js";
 
 function captureState(session) {
   const doc = session.doc;
@@ -15,10 +15,11 @@ function captureState(session) {
   };
 }
 
-// Canvases that only the stored state references are what the entry keeps alive.
+// Canvases and the selection that only the stored state references are what
+// the entry keeps alive; anything the document still uses costs nothing extra.
 function stateBytes(stored, current) {
   const live = new Set(current.doc?.layers.map((l) => l.canvas));
-  let total = selectionBytes(stored.selection);
+  let total = stored.selection === current.selection ? 0 : selectionBytes(stored.selection);
   for (const layer of stored.doc?.layers || [])
     if (!live.has(layer.canvas)) total += layer.canvas.width * layer.canvas.height * 4;
   return total;
@@ -171,12 +172,12 @@ export class EditorSession {
   setSelection(selection, label = "Selection", options) {
     const tx = this.begin(label, options);
     tx.damage = false;
-    this.selection = selection;
+    this.selection = nonEmpty(selection);
     this.end(tx);
   }
   // Preview a selection without recording history (e.g. while dragging).
   previewSelection(selection) {
-    this.selection = selection;
+    this.selection = nonEmpty(selection);
     this.emitChange(false);
   }
 

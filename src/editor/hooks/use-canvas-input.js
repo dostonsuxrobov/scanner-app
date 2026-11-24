@@ -12,7 +12,8 @@ export function useCanvasInput(rt, ref) {
     const el = ref.current;
     if (!el) return undefined;
     const touches = new Map();
-    let mode = null; // "tool" | "pan" | "pinch"
+    let mode = null; // "tool" | "pan" | "pinch" | "ignore"
+    let active = null; // id of the pointer driving the tool or pan gesture
     let pan = null;
     let pinch = null;
     let last = null; // latest tool event under the pointer
@@ -44,15 +45,20 @@ export function useCanvasInput(rt, ref) {
       const rect = el.getBoundingClientRect();
       if (event.pointerType === "touch") {
         touches.set(event.pointerId, { x: event.clientX - rect.left, y: event.clientY - rect.top });
-        if (touches.size === 2) {
-          // A second finger turns a stroke into a pinch: abandon the stroke.
+        // A second finger turns a one-finger stroke into a pinch: abandon the
+        // stroke. Fingers landing while a pen or mouse draws (a resting palm)
+        // leave that stroke alone.
+        if (touches.size === 2 && (!mode || mode === "ignore" || touches.has(active))) {
           if (mode === "tool") toTool("cancel");
           rt.gestureActive = false;
           mode = "pinch";
+          active = null;
           startPinch();
           return;
         }
       }
+      // One gesture at a time: another pointer going down must not restart it.
+      if (mode) return;
       if (event.button === 1 || rt.keys.space) {
         event.preventDefault();
         mode = "pan";
@@ -63,6 +69,7 @@ export function useCanvasInput(rt, ref) {
         const e = toolEvent(event, el, rt.view.getState());
         toTool("down", e);
       } else return;
+      active = event.pointerId;
       el.setPointerCapture(event.pointerId);
       updateCursor();
     }
@@ -81,6 +88,8 @@ export function useCanvasInput(rt, ref) {
         setView(rt, { ...view, ...zoomed, x: zoomed.x + mid.x - pinch.mid.x, y: zoomed.y + mid.y - pinch.mid.y });
         return;
       }
+      // Only the pointer that started a gesture drives it.
+      if ((mode === "pan" || mode === "tool") && event.pointerId !== active) return;
       if (mode === "pan") {
         setView(rt, { ...view, x: pan.view.x + event.clientX - pan.x, y: pan.view.y + event.clientY - pan.y });
         return;
@@ -93,7 +102,9 @@ export function useCanvasInput(rt, ref) {
       updateCursor(e);
     }
 
-    function onUp(event) {
+    // `cancelled`: the browser took the pointer away (palm rejection, a system
+    // gesture), so the stroke is abandoned rather than committed.
+    function finish(event, cancelled) {
       touches.delete(event.pointerId);
       if (mode === "pinch") {
         if (touches.size < 2) mode = touches.size ? "ignore" : null;
@@ -103,13 +114,21 @@ export function useCanvasInput(rt, ref) {
         if (!touches.size) mode = null;
         return;
       }
-      if (mode === "tool") toTool("up", toolEvent(event, el, rt.view.getState()));
+      if (mode && event.pointerId !== active) return;
+      if (mode === "tool") {
+        if (cancelled) toTool("cancel");
+        else toTool("up", toolEvent(event, el, rt.view.getState()));
+      }
       rt.gestureActive = false;
       mode = null;
+      active = null;
       pan = null;
       if (el.hasPointerCapture(event.pointerId)) el.releasePointerCapture(event.pointerId);
       updateCursor(toolEvent(event, el, rt.view.getState()));
     }
+
+    const onUp = (event) => finish(event, false);
+    const onCancel = (event) => finish(event, true);
 
     function onLeave() {
       if (mode) return;
@@ -130,7 +149,7 @@ export function useCanvasInput(rt, ref) {
     el.addEventListener("pointerdown", onDown);
     el.addEventListener("pointermove", onMove);
     el.addEventListener("pointerup", onUp);
-    el.addEventListener("pointercancel", onUp);
+    el.addEventListener("pointercancel", onCancel);
     el.addEventListener("pointerleave", onLeave);
     el.addEventListener("editor-space", onSpace);
     const preventMenu = (e) => e.preventDefault();
@@ -139,7 +158,7 @@ export function useCanvasInput(rt, ref) {
       el.removeEventListener("pointerdown", onDown);
       el.removeEventListener("pointermove", onMove);
       el.removeEventListener("pointerup", onUp);
-      el.removeEventListener("pointercancel", onUp);
+      el.removeEventListener("pointercancel", onCancel);
       el.removeEventListener("pointerleave", onLeave);
       el.removeEventListener("editor-space", onSpace);
       window.removeEventListener("keydown", onModifier);

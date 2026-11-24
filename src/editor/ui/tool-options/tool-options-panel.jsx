@@ -7,6 +7,7 @@ import { RectSelectOptions } from "./rect-select-options.jsx";
 import { TransformOptions } from "./transform-options.jsx";
 import { ColorSelectOptions } from "./color-select-options.jsx";
 import { PaintOptions } from "./paint-options.jsx";
+import { BucketOptions } from "./bucket-options.jsx";
 import { TextOptions } from "./text-options.jsx";
 import { ShapeOptions } from "./shape-options.jsx";
 import { EyedropperOptions } from "./eyedropper-options.jsx";
@@ -19,6 +20,7 @@ const PANELS = {
   bycolor: () => <ColorSelectOptions />,
   brush: () => <PaintOptions tool="brush" />,
   eraser: () => <PaintOptions tool="eraser" />,
+  bucket: () => <BucketOptions />,
   text: () => <TextOptions />,
   rectangle: () => <ShapeOptions tool="rectangle" />,
   ellipse: () => <ShapeOptions tool="ellipse" />,

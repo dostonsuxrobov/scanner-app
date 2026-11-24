@@ -17,5 +17,10 @@ export function rasterizeText(rt, layer) {
   rt.session.edit("Rasterize text", () => {
     layer.text = null;
   });
+  textConverted(rt, layer);
+}
+
+// Tells the user that an edit turned a text layer into pixels.
+export function textConverted(rt, layer) {
   rt.toast(`“${layer.name}” is now a pixel layer; its text is no longer editable.`);
 }

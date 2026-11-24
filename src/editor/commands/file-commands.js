@@ -1,14 +1,14 @@
 // File menu: opening images, PDFs, and projects; saving; exporting.
-import { createCanvas } from "../engine/canvas.js";
+import { canvasToBlob, createCanvas, loadImageFromBlob } from "../engine/canvas.js";
 import { createLayer } from "../engine/layer.js";
 import { MAX_LAYERS } from "../engine/limits.js";
 import { downloadBlob } from "../engine/io/download.js";
-import { EXPORT_FORMATS, exportImage } from "../engine/io/export-image.js";
+import { exportImage } from "../engine/io/export-image.js";
+import { EXPORT_FORMATS, writtenFormat } from "../engine/io/export-formats.js";
 import { baseName, fileKind } from "../engine/io/file-kind.js";
 import { decodeImageFile } from "../engine/io/image-file.js";
 import { projectFileName } from "../engine/io/project-format.js";
 import { readProject, writeProject } from "../engine/io/project-io.js";
-import { loadImage } from "../engine/canvas.js";
 import { flatten } from "../engine/flatten.js";
 import { useScannerStore } from "../../store/scanner-store";
 import { guardUnsaved, openCanvas, openDocument } from "./document-commands.js";
@@ -53,12 +53,14 @@ export function openFiles(rt, files, { asLayers = false } = {}) {
         else addLayerFromCanvas(rt, canvas, baseName(file.name));
       }
       // A freshly opened image (even with several files as layers) has no unsaved work.
-      if (!intoCurrent) rt.session.markSaved();
+      if (images.length && !intoCurrent) rt.session.markSaved();
       if (reduced) rt.toast("A large image was reduced to fit the editor's size limit.");
     });
     if (pdf) rt.store.getState().openDialog("pdf", { file: pdf, asLayers: intoCurrent || images.length > 0 });
   };
-  if (intoCurrent || (!images.length && pdf)) return run();
+  // A PDF on its own replaces nothing until its pages are chosen, so it asks
+  // about unsaved changes then (see openPdfPages), not before its dialog.
+  if (intoCurrent || !images.length) return run();
   guardUnsaved(rt, run, "open another file");
 }
 
@@ -68,11 +70,15 @@ export function openPdfPages(rt, pages, { asLayers, name }) {
   const [first, ...rest] = pages;
   const fresh = !asLayers || !rt.session.hasDocument;
   const title = (page) => `${name} p${page.number}`;
-  if (fresh) openCanvas(rt, first.canvas, pages.length > 1 ? name : title(first), { layerName: title(first) });
-  else addLayerFromCanvas(rt, first.canvas, title(first));
-  for (const page of rest) addLayerFromCanvas(rt, page.canvas, title(page));
-  if (fresh) rt.session.markSaved();
-  if (pages.some((p) => p.scaled)) rt.toast("A page was rendered smaller to fit the editor's size limit.");
+  const open = () => {
+    if (fresh) openCanvas(rt, first.canvas, pages.length > 1 ? name : title(first), { layerName: title(first) });
+    else addLayerFromCanvas(rt, first.canvas, title(first));
+    for (const page of rest) addLayerFromCanvas(rt, page.canvas, title(page));
+    if (fresh) rt.session.markSaved();
+    if (pages.some((p) => p.scaled)) rt.toast("A page was rendered smaller to fit the editor's size limit.");
+  };
+  if (fresh) guardUnsaved(rt, open, "open the PDF");
+  else open();
 }
 
 async function openProjectFile(rt, file) {
@@ -87,49 +93,61 @@ export function openScannerPage(rt, page) {
     rt,
     () =>
       rt.task("Opening page…", async () => {
-        const image = await loadImage(page.src);
-        const canvas = createCanvas(image.width, image.height);
-        canvas.getContext("2d").drawImage(image, 0, 0);
+        const image = await loadImageFromBlob(page.blob);
+        const canvas = createCanvas(page.width, page.height);
+        canvas.getContext("2d").drawImage(image, 0, 0, page.width, page.height);
         openCanvas(rt, canvas, baseName(page.name), { sourceId: page.id });
       }),
     "open another image",
   );
 }
 
+// Returns whether the project was written, so callers never discard the
+// document after a failed save.
 export function saveProject(rt) {
-  if (!rt.session.hasDocument || !settle(rt)) return;
+  if (!rt.session.hasDocument || !settle(rt)) return false;
   const { doc, selection } = rt.session;
-  downloadBlob(writeProject(doc, selection), projectFileName(doc.name));
+  try {
+    downloadBlob(writeProject(doc, selection), projectFileName(doc.name));
+  } catch (error) {
+    // Very large documents can exceed what the browser can hold in one file.
+    rt.toast(`The project could not be saved: ${error.message || error}. Export the image instead, or merge layers and try again.`, true);
+    return false;
+  }
   rt.session.markSaved();
   rt.toast("Project saved. Open it again with File › Open to keep editing layers.");
+  return true;
 }
 
 export async function exportDocument(rt, { fileName, ...options }) {
   if (!rt.session.hasDocument || !settle(rt)) return false;
   const blob = await rt.task("Exporting…", () => exportImage(rt.session.doc, options));
   if (!blob) return false;
-  const spec = EXPORT_FORMATS[options.format];
+  // The browser may not be able to write the requested format (e.g. WebP).
+  const written = writtenFormat(blob, options.format);
+  const spec = EXPORT_FORMATS[written];
   const name = `${(fileName || rt.session.doc.name).replace(/\.[a-z0-9]+$/i, "")}.${spec.ext}`;
   downloadBlob(blob, name);
   rt.session.markSaved();
   rt.store.getState().setPreference("exportFormat", options.format);
-  rt.toast(`Exported ${name}`);
+  if (written === options.format) rt.toast(`Exported ${name}`);
+  else rt.toast(`This browser cannot write ${EXPORT_FORMATS[options.format].label}, so the image was exported as ${name}.`, true);
   return true;
 }
 
 // Places a flattened copy in the Simple scanner, replacing the page it came from.
-export function sendToScanner(rt) {
+export async function sendToScanner(rt) {
   if (!rt.session.hasDocument || !settle(rt)) return;
   const doc = rt.session.doc;
-  const src = flatten(doc).toDataURL("image/png");
+  const image = { blob: await canvasToBlob(flatten(doc)), width: doc.width, height: doc.height, paper: null };
   const scanner = useScannerStore.getState();
   const page = rt.session.sourceId && scanner.pages.find((p) => p.id === rt.session.sourceId);
   if (page) {
-    scanner.updatePage(page.id, { src, width: doc.width, height: doc.height });
+    scanner.commitImage(page.id, image);
     rt.toast(`Updated “${page.name}” in Simple.`);
   } else {
     const id = globalThis.crypto?.randomUUID?.() ?? String(Date.now());
-    scanner.addPage({ id, name: doc.name, src, originalSrc: src, width: doc.width, height: doc.height, originalWidth: doc.width, originalHeight: doc.height, createdAt: Date.now() });
+    scanner.addPage({ id, name: doc.name, createdAt: Date.now(), ...image, original: image });
     rt.session.sourceId = id;
     rt.toast(`Added “${doc.name}” to Simple as a new page.`);
   }

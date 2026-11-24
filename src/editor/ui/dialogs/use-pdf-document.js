@@ -15,7 +15,8 @@ export function usePdfDocument(file) {
     (async () => {
       try {
         opened = await openPdf(file);
-        if (cancelled) return;
+        // The dialog closed while the file was loading: nobody else will close it.
+        if (cancelled) return opened.close();
         setPdf(opened);
         for (let n = 1; n <= Math.min(opened.pageCount, MAX_THUMBNAILS) && !cancelled; n++) {
           const canvas = await opened.thumbnail(n, 160);

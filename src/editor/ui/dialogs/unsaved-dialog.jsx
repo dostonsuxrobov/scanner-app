@@ -23,8 +23,7 @@ export function UnsavedDialog({ onClose, verb, onContinue }) {
             type="button"
             className="ae-button"
             onClick={() => {
-              saveProject(rt);
-              proceed();
+              if (saveProject(rt)) proceed();
             }}
           >
             Save project

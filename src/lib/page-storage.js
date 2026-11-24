@@ -25,13 +25,15 @@ class PageStorage {
     });
   }
 
+  // Resolves once the write is committed; rejects if it fails (e.g. no space left).
   async savePage(page) {
     await this.ready;
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction(STORE_NAME, 'readwrite');
-      const store = tx.objectStore(STORE_NAME);
-      store.put(page).onsuccess = () => resolve();
+      tx.objectStore(STORE_NAME).put(page);
+      tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
     });
   }
 

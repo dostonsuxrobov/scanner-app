@@ -7,7 +7,7 @@ import { SAMPLE_SIZES } from "./sample-sizes.js";
 import { useToolOptions } from "./use-tool-options.js";
 
 // Changes that alter which pixels match re-apply the last click live.
-const LIVE = new Set(["threshold", "antialias", "feather"]);
+const LIVE = new Set(["threshold", "antialias", "feather", "contiguous"]);
 
 export function ColorSelectOptions() {
   const rt = useRuntime();
@@ -35,10 +35,13 @@ export function ColorSelectOptions() {
       />
       <SelectField label="Sample size" value={String(o.sampleSize)} onChange={(v) => set("sampleSize", Number(v))} options={SAMPLE_SIZES} />
       <SliderField label="Feather" unit="px" min={0} max={50} value={o.feather} onChange={(v) => set("feather", v)} />
+      <CheckField label="Contiguous (only the area touching the click)" checked={o.contiguous} onChange={(v) => set("contiguous", v)} />
       <CheckField label="Sample all visible layers" checked={o.sampleMerged} onChange={(v) => set("sampleMerged", v)} />
       <CheckField label="Select transparent areas" checked={o.transparent} onChange={(v) => set("transparent", v)} />
       <CheckField label="Smooth edges (antialias)" checked={o.antialias} onChange={(v) => set("antialias", v)} />
-      <p className="ae-note">Selects matching color everywhere in the image, including areas that don't touch.</p>
+      <p className="ae-note">
+        {o.contiguous ? "Selects the matching color around the click, up to where it stops (fuzzy select)." : "Selects matching color everywhere in the image, including areas that don't touch."}
+      </p>
     </>
   );
 }
